@@ -7,8 +7,10 @@
 
 import { describe, astroComponentId, childOf, parentOf, pick } from './hit-test.js';
 import { measure, type MeasureResult } from './measure.js';
+import { buildMetrics, type Metric } from './metrics.js';
 import { matchRules, type MatchResult } from './rule-matcher.js';
 import { invalidateStyleIndex } from './stylesheet-index.js';
+import { unitContext } from './units.js';
 import { createOverlay, type BoxModel, type Overlay } from '../ui/overlay.js';
 import { createPanel, type Panel } from '../ui/panel.js';
 import { CSS } from '../ui/styles.js';
@@ -41,6 +43,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
 
   let box: BoxModel | null = null;
   let match: MatchResult | null = null;
+  let metrics: Metric[] = [];
   let transformed = false;
   let placedKey = '';
 
@@ -82,6 +85,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       box = readBox(computed);
       transformed = computed.transform !== 'none';
       match = matchRules(target);
+      metrics = buildMetrics(target, rect, computed, match.rules, unitContext());
     }
 
     const result: MeasureResult | null = pinnedRect ? measure(pinnedRect, rect) : null;
@@ -92,6 +96,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
         target: describe(target),
         rect,
         match,
+        metrics,
         transformed,
         pinned: pinned === target,
         astroComponentId: astroComponentId(target),
@@ -234,6 +239,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       invalidateStyleIndex();
       box = null;
       match = null;
+      metrics = [];
       target = null;
       schedule();
     },

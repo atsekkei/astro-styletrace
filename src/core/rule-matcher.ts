@@ -110,7 +110,7 @@ function inlineRule(
   return {
     selector: 'style="…"',
     rawSelector: 'style="…"',
-    source: { label: 'インラインスタイル', raw: '' },
+    source: { label: 'inline style', raw: '' },
     conditions: [],
     layer: null,
     specificity: [1, 0, 0],

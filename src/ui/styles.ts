@@ -23,7 +23,7 @@ export const CSS = `
   --cal-hover: ${TOKENS.hover};
   --cal-measure: ${TOKENS.measure};
 
-  --cal-glass: color-mix(in oklab, #070912 78%, transparent);
+  --cal-glass: color-mix(in oklab, #070912 90%, transparent);
   --cal-glass-edge: rgba(255, 255, 255, 0.16);
   --cal-glass-sheen: rgba(255, 255, 255, 0.5);
   --cal-text: rgba(244, 247, 255, 0.94);
@@ -58,8 +58,8 @@ export const CSS = `
   left: 0;
   z-index: 2147483001;
   box-sizing: border-box;
-  width: 340px;
-  max-height: min(60vh, 520px);
+  width: 380px;
+  max-height: min(70vh, 620px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0;
@@ -173,6 +173,98 @@ export const CSS = `
 
 .caliper-body {
   padding: 8px 0 10px;
+}
+
+/* 3 列表示（§F2）。宣言値 / 計算値 / 実測値 */
+.caliper-metrics {
+  padding: 2px 0 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.caliper-metric {
+  padding: 3px 14px;
+}
+
+.caliper-metric[data-diverged="true"] {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--cal-measure) 14%, transparent),
+    transparent 70%
+  );
+}
+
+.caliper-metric-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--cal-mono);
+  font-size: 11px;
+}
+
+.caliper-metric-head .caliper-value {
+  color: var(--cal-text);
+}
+
+.caliper-alt {
+  margin-left: auto;
+  color: var(--cal-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.caliper-cols {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0 8px;
+  margin: 1px 0 2px 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.09);
+  padding-left: 8px;
+  font-family: var(--cal-mono);
+  font-size: 11px;
+}
+
+.caliper-col-label {
+  color: var(--cal-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.caliper-col-value {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.caliper-col-value[data-col="computed"] {
+  color: var(--cal-hover);
+}
+
+.caliper-col-value[data-col="measured"] {
+  color: var(--cal-text);
+}
+
+.caliper-col-note {
+  margin-left: 6px;
+  color: var(--cal-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.caliper-col-value[data-col="variables"] {
+  color: var(--cal-faint);
+  font-size: 10px;
+}
+
+.caliper-metric[data-diverged="true"] .caliper-col-value[data-col="measured"] {
+  color: color-mix(in oklab, var(--cal-measure) 80%, white);
+}
+
+.caliper-origin {
+  margin-left: 10px;
+  color: var(--cal-dim);
+  font-family: var(--cal-mono);
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 
 .caliper-group + .caliper-group {

@@ -199,7 +199,7 @@ export function createOverlay(root: ShadowRoot): Overlay {
     node.setAttribute('rx', '2');
     node.setAttribute('stroke-dasharray', '4 3');
 
-    labels.draw(`交差 ${fmt(result.x)} × ${fmt(result.y)}`, left + width / 2, top + height / 2);
+    labels.draw(`overlap ${fmt(result.x)} × ${fmt(result.y)}`, left + width / 2, top + height / 2);
   }
 
   /** gap が狭ければラベルを矢印の外側（延長線上）へ逃がす（§6.7） */

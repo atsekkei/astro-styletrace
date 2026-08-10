@@ -1,11 +1,11 @@
 /**
- * スタイル出自パネル（§F2 のうち M3 の範囲）。
+ * スタイル出自パネル（§F2）。
  *
- * 宣言値 / 計算値 / 実測値の 3 列表示は M4。ここでは
- * 「どのファイルの、どのセレクタが、何を宣言しているか」と
- * 「計算値と一致している宣言はどれか」までを出す。
+ * 上段が 3 列表示（宣言値 / 計算値 / 実測値 + rem・vw 逆算）、
+ * 下段が「どのファイルの、どのセレクタが、何を宣言しているか」。
  */
 
+import { formatMeasured, type Metric } from '../core/metrics.js';
 import { isDefaultProperty, type MatchResult, type MatchedRule } from '../core/rule-matcher.js';
 import { fmt } from '../core/units.js';
 
@@ -13,6 +13,7 @@ export type PanelContent = {
   target: string;
   rect: DOMRect;
   match: MatchResult;
+  metrics: Metric[];
   /** transform 適用中（計算値と実測値がずれる。§6.5） */
   transformed: boolean;
   pinned: boolean;
@@ -60,7 +61,7 @@ export function createPanel(root: ShadowRoot): Panel {
 
     /** hover 要素の近傍へ。ビューポート端で反転させる（§5） */
     place(rect) {
-      const width = el.offsetWidth || 340;
+      const width = el.offsetWidth || 380;
       const height = el.offsetHeight || 200;
       const margin = 12;
 
@@ -106,11 +107,11 @@ function renderHead(head: HTMLElement, content: PanelContent) {
   const badges = document.createElement('div');
   badges.className = 'caliper-badges';
 
-  if (content.pinned) badges.appendChild(badge('ピン留め中', 'pin'));
-  if (content.transformed) badges.appendChild(badge('transform 適用中', 'warn'));
+  if (content.pinned) badges.appendChild(badge('pinned', 'pin'));
+  if (content.transformed) badges.appendChild(badge('transformed', 'warn'));
   if (content.astroComponentId) badges.appendChild(badge(`cid ${content.astroComponentId}`));
   for (const sheet of content.match.unreadable) {
-    badges.appendChild(badge(`解析不能: ${sheet.label}`, 'warn'));
+    badges.appendChild(badge(`unreadable: ${sheet.label}`, 'warn'));
   }
 
   if (badges.childElementCount > 0) head.appendChild(badges);
@@ -132,11 +133,13 @@ function renderBody(
 ) {
   body.textContent = '';
 
+  if (content.metrics.length > 0) body.appendChild(renderMetrics(content.metrics));
+
   const rules = content.match.rules;
   if (rules.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'caliper-empty';
-    empty.textContent = 'マッチしたルールがありません。';
+    empty.textContent = 'No matching rules.';
     body.appendChild(empty);
   }
 
@@ -165,14 +168,106 @@ function renderBody(
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'caliper-toggle';
-  toggle.textContent = showAll ? 'レイアウト関連のみ表示' : 'マッチしたルールの全宣言を表示';
+  toggle.textContent = showAll ? 'Layout properties only' : 'All declarations of matched rules';
   toggle.addEventListener('click', onToggle);
   body.appendChild(toggle);
 
   const hint = document.createElement('p');
   hint.className = 'caliper-hint';
-  hint.textContent = 'Alt: 計測 / Alt+Click: ピン留め / Esc: 解除 / Alt+↑↓: 親子移動';
+  hint.textContent = 'Alt measure · Alt+Click pin · Esc unpin · Alt+↑↓ parent/child';
   body.appendChild(hint);
+}
+
+/** 3 列表示（§F2）。3 つが一致している行は 1 列に畳む */
+function renderMetrics(metrics: Metric[]): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'caliper-metrics';
+
+  for (const metric of metrics) {
+    const row = document.createElement('div');
+    row.className = 'caliper-metric';
+    row.dataset.diverged = String(metric.diverged);
+
+    const headline = document.createElement('div');
+    headline.className = 'caliper-metric-head';
+
+    const prop = document.createElement('span');
+    prop.className = 'caliper-prop';
+    prop.textContent = metric.property;
+    headline.appendChild(prop);
+
+    if (metric.collapsed) {
+      const value = document.createElement('span');
+      value.className = 'caliper-value';
+      value.textContent = metric.computed;
+      headline.appendChild(value);
+    }
+
+    if (metric.alternates) {
+      const alt = document.createElement('span');
+      alt.className = 'caliper-alt';
+      alt.textContent = metric.alternates;
+      headline.appendChild(alt);
+    }
+
+    row.appendChild(headline);
+
+    if (!metric.collapsed) {
+      const columns = document.createElement('dl');
+      columns.className = 'caliper-cols';
+
+      if (metric.declared !== null) {
+        // ショートハンドで書かれていた場合、その名前は値の側に添える
+        // （ラベル列を広げると値の列が潰れる）
+        const via = metric.declaredAs === metric.property ? null : `via ${metric.declaredAs}`;
+        columns.append(...column('declared', metric.declared, 'declared', via));
+        if (metric.variables) columns.append(...column('', metric.variables, 'variables'));
+      }
+      columns.append(...column('computed', metric.computed, 'computed'));
+      if (metric.measured !== null) {
+        columns.append(...column('measured', formatMeasured(metric.measured), 'measured'));
+      }
+
+      row.appendChild(columns);
+    }
+
+    if (metric.declaredSource) {
+      const origin = document.createElement('div');
+      origin.className = 'caliper-origin';
+      origin.textContent = `${metric.declaredSource} · ${metric.declaredSelector ?? ''}`;
+      origin.title = 'Strongest candidate by specificity — not asserted as the winner (§6.4)';
+      row.appendChild(origin);
+    }
+
+    section.appendChild(row);
+  }
+
+  return section;
+}
+
+function column(
+  label: string,
+  value: string,
+  kind: string,
+  note?: string | null,
+): [HTMLElement, HTMLElement] {
+  const dt = document.createElement('dt');
+  dt.className = 'caliper-col-label';
+  dt.textContent = label;
+
+  const dd = document.createElement('dd');
+  dd.className = 'caliper-col-value';
+  dd.dataset.col = kind;
+  dd.textContent = value;
+
+  if (note) {
+    const suffix = document.createElement('span');
+    suffix.className = 'caliper-col-note';
+    suffix.textContent = note;
+    dd.appendChild(suffix);
+  }
+
+  return [dt, dd];
 }
 
 function renderRule(rule: MatchedRule, declarations: MatchedRule['declarations']): HTMLElement {
@@ -209,7 +304,7 @@ function renderRule(rule: MatchedRule, declarations: MatchedRule['declarations']
     item.className = 'caliper-decl';
     item.dataset.overridden = String(declaration.overridden);
     item.dataset.computed = String(declaration.matchesComputed);
-    if (declaration.matchesComputed) item.title = '計算値と一致';
+    if (declaration.matchesComputed) item.title = 'matches the computed value';
 
     const prop = document.createElement('span');
     prop.className = 'caliper-prop';
