@@ -6,7 +6,9 @@
  */
 
 import { formatMeasured, type Metric } from '../core/metrics.js';
+import { copyText, editorTarget, openInEditor } from '../core/open-in-editor.js';
 import { isDefaultProperty, type MatchResult, type MatchedRule } from '../core/rule-matcher.js';
+import type { Source } from '../core/resolve-source.js';
 import { fmt } from '../core/units.js';
 
 export type PanelContent = {
@@ -114,7 +116,65 @@ function renderHead(head: HTMLElement, content: PanelContent) {
     badges.appendChild(badge(`unreadable: ${sheet.label}`, 'warn'));
   }
 
-  if (badges.childElementCount > 0) head.appendChild(badges);
+  // エージェントへ渡す用（M5）。パネルの内容をそのままテキストで持ち出す
+  const copy = action('copy all', 'Copy the whole panel as text', () =>
+    copyText(summarize(content)),
+  );
+  badges.appendChild(copy);
+
+  head.appendChild(badges);
+}
+
+/**
+ * 押すと非同期で何かして、結果を短時間だけ見せるボタン。
+ *
+ * 成否を出さないと「押したのに何も起きない」（エディタが見つからない、
+ * クリップボードが拒否された）が黙って消える。
+ */
+function action(label: string, title: string, run: () => Promise<boolean>): HTMLButtonElement {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'caliper-action';
+  el.title = title;
+  el.textContent = label;
+
+  let timer = 0;
+  el.addEventListener('click', (event) => {
+    event.stopPropagation();
+    void run().then((ok) => {
+      el.dataset.state = ok ? 'ok' : 'fail';
+      clearTimeout(timer);
+      timer = setTimeout(() => delete el.dataset.state, 1000) as unknown as number;
+    });
+  });
+
+  return el;
+}
+
+/** パネルの表示内容をプレーンテキストに落とす（M5「パネル内容のコピー」） */
+function summarize(content: PanelContent): string {
+  const lines: string[] = [
+    `${content.target}  ${fmt(content.rect.width)} × ${fmt(content.rect.height)}`,
+  ];
+
+  for (const metric of content.metrics) {
+    const parts = [`declared ${metric.declared ?? '-'}`, `computed ${metric.computed}`];
+    if (metric.measured !== null) parts.push(`measured ${formatMeasured(metric.measured)}`);
+    lines.push(`  ${metric.property}: ${parts.join(' / ')}`);
+    if (metric.declaredSource) {
+      lines.push(`    ${metric.declaredSource} · ${metric.declaredSelector ?? ''}`);
+    }
+  }
+
+  for (const rule of content.match.rules) {
+    lines.push(`  ${rule.source.label} · ${rule.rawSelector} (${rule.specificity.join(',')})`);
+    for (const declaration of rule.declarations) {
+      const flags = declaration.overridden ? ' [overridden]' : '';
+      lines.push(`    ${declaration.property}: ${declaration.value}${flags}`);
+    }
+  }
+
+  return lines.join('\n');
 }
 
 function badge(text: string, tone?: 'warn' | 'pin'): HTMLElement {
@@ -147,11 +207,7 @@ function renderBody(
     const section = document.createElement('section');
     section.className = 'caliper-group';
 
-    const file = document.createElement('div');
-    file.className = 'caliper-file';
-    file.dataset.inline = String(group.rules[0]?.inline ?? false);
-    file.textContent = group.label;
-    section.appendChild(file);
+    section.appendChild(renderFile(group));
 
     for (const rule of group.rules) {
       const declarations = showAll
@@ -176,6 +232,35 @@ function renderBody(
   hint.className = 'caliper-hint';
   hint.textContent = 'Alt measure · Alt+Click pin · Esc unpin · Alt+↑↓ parent/child';
   body.appendChild(hint);
+}
+
+/** 出自ファイルの見出し。ディスク上にあるファイルならエディタで開ける（§6.9） */
+function renderFile(group: Group): HTMLElement {
+  const inline = group.rules[0]?.inline ?? false;
+  const target = inline ? null : editorTarget(group.source);
+
+  if (!target) {
+    const el = document.createElement('div');
+    el.className = 'caliper-file';
+    el.dataset.inline = String(inline);
+    el.textContent = group.label;
+    return el;
+  }
+
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'caliper-file';
+  el.dataset.inline = 'false';
+  el.dataset.open = 'true';
+  el.title = `Open ${target} in your editor`;
+  el.textContent = group.label;
+  el.addEventListener('click', () => {
+    void openInEditor(target).then((ok) => {
+      el.dataset.state = ok ? 'ok' : 'fail';
+      setTimeout(() => delete el.dataset.state, 1000);
+    });
+  });
+  return el;
 }
 
 /** 3 列表示（§F2）。3 つが一致している行は 1 列に畳む */
@@ -281,6 +366,11 @@ function renderRule(rule: MatchedRule, declarations: MatchedRule['declarations']
   text.textContent = rule.rawSelector;
   selector.appendChild(text);
 
+  // 行番号が無い以上、エディタ側で検索してもらうしかない（§6.9）
+  selector.appendChild(
+    action('copy', 'Copy this selector', () => copyText(rule.rawSelector)),
+  );
+
   const spec = document.createElement('span');
   spec.className = 'caliper-spec';
   spec.textContent = rule.layer
@@ -330,7 +420,7 @@ function renderRule(rule: MatchedRule, declarations: MatchedRule['declarations']
   return wrap;
 }
 
-type Group = { label: string; rules: MatchedRule[] };
+type Group = { label: string; source: Source; rules: MatchedRule[] };
 
 /** 出自ファイルごとにグルーピング（§F2）。並び順は詳細度順のまま保つ */
 function groupBySource(rules: MatchedRule[]): Group[] {
@@ -340,7 +430,7 @@ function groupBySource(rules: MatchedRule[]): Group[] {
     const label = rule.source.label;
     const last = groups[groups.length - 1];
     if (last && last.label === label) last.rules.push(rule);
-    else groups.push({ label, rules: [rule] });
+    else groups.push({ label, source: rule.source, rules: [rule] });
   }
 
   return groups;

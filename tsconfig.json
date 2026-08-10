@@ -9,6 +9,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "skipLibCheck": true,
+    "esModuleInterop": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true

@@ -289,6 +289,67 @@ export const CSS = `
   color: var(--cal-pin);
 }
 
+.caliper-file[data-open="true"] {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 120ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .caliper-file[data-open="true"]:hover {
+    text-decoration-color: currentColor;
+  }
+}
+
+.caliper-file:focus-visible,
+.caliper-action:focus-visible {
+  outline: 2px solid var(--cal-hover);
+  outline-offset: 2px;
+}
+
+.caliper-file[data-state="ok"] {
+  color: var(--cal-text);
+}
+
+.caliper-file[data-state="fail"] {
+  color: var(--cal-measure);
+}
+
+/* エディタジャンプ / コピー（M5）。普段は沈ませ、hover で浮かせる */
+.caliper-action {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--cal-faint);
+  font-family: var(--cal-sans);
+  font-size: 10px;
+  line-height: 15px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .caliper-action:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--cal-text);
+  }
+}
+
+.caliper-action[data-state="ok"] {
+  border-color: color-mix(in oklab, var(--cal-hover) 55%, transparent);
+  color: color-mix(in oklab, var(--cal-hover) 85%, white);
+}
+
+.caliper-action[data-state="fail"] {
+  border-color: color-mix(in oklab, var(--cal-measure) 55%, transparent);
+  color: color-mix(in oklab, var(--cal-measure) 85%, white);
+}
+
 .caliper-rule {
   padding: 3px 14px 7px;
 }

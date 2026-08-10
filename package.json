@@ -28,5 +28,8 @@
     "@types/node": "^26.2.0",
     "astro": "^5.13.0",
     "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "launch-editor-middleware": "^2.14.1"
   }
 }

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      launch-editor-middleware:
+        specifier: ^2.14.1
+        version: 2.14.1
       vite:
         specifier: ^6 || ^7
         version: 6.4.3(@types/node@26.2.0)
@@ -1066,6 +1069,12 @@ packages:
     resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
     engines: {node: '>=6'}
 
+  launch-editor-middleware@2.14.1:
+    resolution: {integrity: sha512-Y8rM8ujxag67bXKCML5RLK5neOwj9rcgYlhgPAG0roa3sM6gjBjq7Bl/mE63XcdAmjMMsPtJhd1ry8+wstwQew==}
+
+  launch-editor@2.14.1:
+    resolution: {integrity: sha512-QWBrQsMpH7gPr965dsKD/3cKWiNoTjpATQf++Xq63N6sKRGMwlVXz41O1IZTMfZQgBctD/K5Zt06+/I6pP6+HA==}
+
   longest-streak@3.1.0:
     resolution: {integrity: sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==}
 
@@ -1378,6 +1387,10 @@ packages:
   sharp@0.34.5:
     resolution: {integrity: sha512-Ou9I5Ft9WNcCbXrU9cMgPBcCK8LiwLqcbywW3t4oDV37n1pzpuNLsYiAV8eODnjbtQlSDwZ2cUEeQz4E54Hltg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
+
+  shell-quote@1.10.0:
+    resolution: {integrity: sha512-w1aiOKwKuRgtwAReIIj89puqg+I7GvX4IbLrvmhXbzQsj1+Zwi4VO3+fa6ZF91TWSjIxoEkKnMeHcLEODK5ZXA==}
+    engines: {node: '>= 0.4'}
 
   shiki@3.23.0:
     resolution: {integrity: sha512-55Dj73uq9ZXL5zyeRPzHQsK7Nbyt6Y10k5s7OjuFZGMhpp4r/rsLBH0o/0fstIzX1Lep9VxefWljK/SKCzygIA==}
@@ -2636,6 +2649,15 @@ snapshots:
 
   kleur@3.0.3: {}
 
+  launch-editor-middleware@2.14.1:
+    dependencies:
+      launch-editor: 2.14.1
+
+  launch-editor@2.14.1:
+    dependencies:
+      picocolors: 1.1.1
+      shell-quote: 1.10.0
+
   longest-streak@3.1.0: {}
 
   lru-cache@11.5.2: {}
@@ -3226,6 +3248,8 @@ snapshots:
       '@img/sharp-win32-ia32': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
     optional: true
+
+  shell-quote@1.10.0: {}
 
   shiki@3.23.0:
     dependencies:
