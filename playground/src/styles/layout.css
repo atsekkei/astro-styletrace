@@ -1,0 +1,61 @@
+/* ネイティブ CSS ネスト・@media・@supports・詳細度の競合を意図的に混ぜた「壊れやすい CSS の見本市」 */
+
+@layer components {
+  .page {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding: var(--space-l) var(--space-m);
+
+    & > header {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-s);
+      padding-block-end: var(--space-m);
+      border-block-end: 1px solid var(--line);
+
+      & h1 {
+        margin: 0;
+        font-size: clamp(1.5rem, 4vw, 2.5rem);
+        letter-spacing: -0.02em;
+      }
+    }
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: var(--space-m);
+    margin-block: var(--space-l);
+
+    @media (min-width: 48rem) {
+      gap: var(--space-l);
+    }
+  }
+
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+
+    /* margin 相殺の観察用: gap があるので計算値と実測値が一致するはず */
+    & > p {
+      margin-block: 1rem;
+    }
+  }
+
+  @supports (container-type: inline-size) {
+    .card-grid {
+      container-type: inline-size;
+    }
+  }
+}
+
+/* 層に属さない宣言は名前付き層より強い。詳細度は低いのに勝つ例 */
+.card-grid {
+  padding-inline: var(--space-s);
+}
+
+/* 詳細度の競合: 負けている側が取り消し線で出るか */
+.page .card-grid {
+  gap: 1.25rem;
+}

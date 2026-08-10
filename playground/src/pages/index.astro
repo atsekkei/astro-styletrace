@@ -1,0 +1,92 @@
+---
+import Card from '../components/Card.astro';
+import '../styles/tokens.css';
+import '../styles/layout.css';
+---
+
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>astro-caliper playground</title>
+    <!-- cross-origin stylesheet。cssRules が読めず「解析不能」として出るはず（§6.3） -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+    />
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>caliper playground</h1>
+        <p style="margin: 0; color: rgba(16, 19, 28, 0.6)">
+          Alt を押しながら要素に hover
+        </p>
+      </header>
+
+      <section class="card-grid">
+        <Card title="clamp() で組んだ余白">
+          <p>宣言値は clamp(1rem, 2vw, 2rem)。計算値と一致するかを見る。</p>
+          <p>2 つ目の段落。gap と margin の競合を観察する。</p>
+        </Card>
+
+        <Card title="ネスト CSS" tone="accent">
+          <p>ネストされた <code>&amp; h2</code> が解決されているか。</p>
+        </Card>
+
+        <Card title="transform 適用中">
+          <p class="tilted">この段落には transform がかかっている。</p>
+        </Card>
+      </section>
+
+      <section class="row">
+        <div class="box a">A</div>
+        <div class="box b">B</div>
+      </section>
+
+      <section class="nested">
+        <div class="outer">
+          <div class="inner">内包パターンの確認用</div>
+        </div>
+      </section>
+    </div>
+
+    <style>
+      .tilted {
+        transform: rotate(-1.5deg) translateX(4px);
+      }
+
+      .row {
+        display: flex;
+        gap: 3.5rem;
+        margin-block: var(--space-l);
+      }
+
+      .box {
+        display: grid;
+        place-items: center;
+        width: 8rem;
+        height: 6rem;
+        border-radius: 10px;
+        background: color-mix(in oklab, var(--ink) 8%, transparent);
+      }
+
+      .box.b {
+        height: 9rem;
+      }
+
+      .nested .outer {
+        padding: 2.5rem 3rem;
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+      }
+
+      .nested .inner {
+        padding: 1rem;
+        background: color-mix(in oklab, var(--ink) 6%, transparent);
+        border-radius: 8px;
+      }
+    </style>
+  </body>
+</html>

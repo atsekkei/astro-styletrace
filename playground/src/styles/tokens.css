@@ -1,0 +1,32 @@
+/* @layer の順序宣言。後に書いた層ほど強い */
+@layer reset, base, components;
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+  }
+}
+
+@layer base {
+  :root {
+    --space-s: clamp(0.5rem, 1vw, 0.75rem);
+    --space-m: clamp(1rem, 2vw, 2rem);
+    --space-l: clamp(2rem, 5vw, 4rem);
+    --ink: #10131c;
+    --paper: #f6f7fb;
+    --line: rgba(16, 19, 28, 0.12);
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: system-ui, sans-serif;
+    line-height: 1.6;
+  }
+}

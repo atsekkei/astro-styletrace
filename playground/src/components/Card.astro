@@ -1,0 +1,36 @@
+---
+interface Props {
+  title: string;
+  tone?: 'plain' | 'accent';
+}
+
+const { title, tone = 'plain' } = Astro.props;
+---
+
+<article class="card" data-tone={tone}>
+  <h2>{title}</h2>
+  <div class="stack">
+    <slot />
+  </div>
+</article>
+
+<style>
+  /* .astro の scoped style。data-astro-cid-* が付き、data-vite-dev-id で出自が取れる */
+  .card {
+    padding: var(--space-m);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: white;
+
+    & h2 {
+      margin: 0 0 var(--space-s);
+      font-size: 1.125rem;
+      line-height: 1.3;
+    }
+  }
+
+  .card[data-tone='accent'] {
+    border-color: color-mix(in oklab, #4f46e5 40%, transparent);
+    background: color-mix(in oklab, #4f46e5 6%, white);
+  }
+</style>

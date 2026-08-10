@@ -1,0 +1,32 @@
+{
+  "name": "astro-caliper",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "hover でスタイルの出自と要素間距離を表示する Astro Dev Toolbar App",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -w -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check:boundary": "sh scripts/check-boundary.sh",
+    "check": "pnpm run typecheck && pnpm run check:boundary"
+  },
+  "peerDependencies": {
+    "astro": "^5",
+    "vite": "^6 || ^7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "astro": "^5.13.0",
+    "typescript": "^5.9.0"
+  }
+}
