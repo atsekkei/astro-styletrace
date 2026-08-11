@@ -5,6 +5,7 @@
  * 「読み終わってから書く」順序を守る。
  */
 
+import { loadCssMap } from './css-map.js';
 import { describe, astroComponentId, childOf, parentOf, pick } from './hit-test.js';
 import { measure, type MeasureResult } from './measure.js';
 import { buildMetrics, type Metric } from './metrics.js';
@@ -192,6 +193,9 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       if (active) return;
       active = true;
 
+      // 行番号マップは hover の前に取っておく（引くのは同期。§7）
+      void loadCssMap();
+
       document.addEventListener('pointermove', onPointerMove, { capture: true, passive: true });
       document.addEventListener('keydown', onKeyDown, true);
       document.addEventListener('keyup', onKeyUp, true);
@@ -237,6 +241,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
 
     invalidate() {
       invalidateStyleIndex();
+      void loadCssMap();
       box = null;
       match = null;
       metrics = [];

@@ -11,6 +11,9 @@ importers:
       launch-editor-middleware:
         specifier: ^2.14.1
         version: 2.14.1
+      postcss:
+        specifier: ^8.5.26
+        version: 8.5.26
       vite:
         specifier: ^6 || ^7
         version: 6.4.3(@types/node@26.2.0)

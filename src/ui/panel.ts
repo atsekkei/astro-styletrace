@@ -5,6 +5,7 @@
  * 下段が「どのファイルの、どのセレクタが、何を宣言しているか」。
  */
 
+import { lineFor } from '../core/css-map.js';
 import { formatMeasured, type Metric } from '../core/metrics.js';
 import { copyText, editorTarget, openInEditor } from '../core/open-in-editor.js';
 import { isDefaultProperty, type MatchResult, type MatchedRule } from '../core/rule-matcher.js';
@@ -366,10 +367,16 @@ function renderRule(rule: MatchedRule, declarations: MatchedRule['declarations']
   text.textContent = rule.rawSelector;
   selector.appendChild(text);
 
-  // 行番号が無い以上、エディタ側で検索してもらうしかない（§6.9）
-  selector.appendChild(
-    action('copy', 'Copy this selector', () => copyText(rule.rawSelector)),
-  );
+  // 行が引けるなら直接そこへ飛ぶ（M6）。引けなければセレクタを持ち出して検索（M5）
+  const file = rule.inline ? null : editorTarget(rule.source);
+  const line = file ? lineFor(rule.source, rule.rawSelector) : null;
+
+  if (file && line !== null) {
+    selector.appendChild(
+      action('open', `Open ${file}:${line}`, () => openInEditor(`${file}:${line}`)),
+    );
+  }
+  selector.appendChild(action('copy', 'Copy this selector', () => copyText(rule.rawSelector)));
 
   const spec = document.createElement('span');
   spec.className = 'caliper-spec';
