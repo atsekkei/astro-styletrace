@@ -150,6 +150,7 @@ export const CSS = `
   z-index: 1;
   padding: ${U * 4}px;
   border-bottom: 1px dashed var(--cal-rule);
+  background: var(--cal-surface);
 }
 
 .cal-target {
