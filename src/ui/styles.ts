@@ -230,6 +230,7 @@ export const CSS = `
 
 .cal-prop {
   font-weight: 500;
+  color: var(--cal-ink-2);
 }
 
 .cal-selector {
