@@ -13,7 +13,7 @@ export const TOKENS = {
   ink3: '#808080',
   rule: '#D9D9D9',
   accent: '#0000FF',
-  surface: '#F2F2F2E6',
+  surface: '#F2F2F2CC',
 
   /** オーバーレイ。パネルと同じ体系に寄せる（§5） */
   margin: 'rgba(0, 0, 255, 0.10)',
@@ -162,6 +162,14 @@ export const CSS = `
   padding: ${U * 4}px;
   border-bottom: 1px dashed var(--cal-rule);
   background: var(--cal-surface);
+  /* パネルを持ち運ぶ取っ手。ポインタ操作をブラウザのスクロールに渡さない */
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.cal-panel[data-dragging="true"] .cal-head {
+  cursor: grabbing;
 }
 
 .cal-target {

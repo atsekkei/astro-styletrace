@@ -50,6 +50,50 @@ export function createPanel(root: ShadowRoot): Panel {
   let expanded = new Set<string>();
   let last: PanelContent | null = null;
 
+  /** 現在位置。transform で持つ（レイアウトを起こさない） */
+  let x = 0;
+  let y = 0;
+  /** 見出しをドラッグして置き直した。以後 place() は効かせない */
+  let pinned = false;
+
+  function moveTo(nextX: number, nextY: number) {
+    const margin = 12;
+    const width = el.offsetWidth || 400;
+    const height = el.offsetHeight || 200;
+    // 掴んだまま画面外へ出すと戻せなくなる。常に全体を収める
+    x = Math.min(Math.max(nextX, margin), Math.max(margin, innerWidth - width - margin));
+    y = Math.min(Math.max(nextY, margin), Math.max(margin, innerHeight - height - margin));
+    el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+  }
+
+  head.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    // 見出しに置かれたボタン（将来分を含む）はドラッグの取っ手にしない
+    if (event.target instanceof Element && event.target.closest('button')) return;
+
+    const offsetX = event.clientX - x;
+    const offsetY = event.clientY - y;
+    pinned = true;
+    el.dataset.dragging = 'true';
+    // テキスト選択・ページ側のドラッグ開始を止める
+    event.preventDefault();
+    head.setPointerCapture(event.pointerId);
+
+    const onMove = (move: PointerEvent) => {
+      moveTo(move.clientX - offsetX, move.clientY - offsetY);
+    };
+    const onEnd = () => {
+      head.removeEventListener('pointermove', onMove);
+      head.removeEventListener('pointerup', onEnd);
+      head.removeEventListener('pointercancel', onEnd);
+      delete el.dataset.dragging;
+    };
+
+    head.addEventListener('pointermove', onMove);
+    head.addEventListener('pointerup', onEnd);
+    head.addEventListener('pointercancel', onEnd);
+  });
+
   function render() {
     if (!last) return;
     renderHead(head, last);
@@ -69,19 +113,24 @@ export function createPanel(root: ShadowRoot): Panel {
 
     /** hover 要素の近傍へ。ビューポート端で反転させる（§5） */
     place(rect) {
+      // 自分で置いた位置は動かさない。選択を変えるたびに戻ると避けた意味がない
+      if (pinned) return;
+
       const width = el.offsetWidth || 400;
       const height = el.offsetHeight || 200;
       const margin = 12;
 
-      let x = rect.right + margin;
-      if (x + width > innerWidth - margin) x = rect.left - width - margin;
-      if (x < margin) x = Math.min(margin, Math.max(0, innerWidth - width - margin));
+      let nextX = rect.right + margin;
+      if (nextX + width > innerWidth - margin) nextX = rect.left - width - margin;
+      if (nextX < margin) nextX = Math.min(margin, Math.max(0, innerWidth - width - margin));
 
-      let y = rect.top;
-      if (y + height > innerHeight - margin) y = innerHeight - height - margin;
-      if (y < margin) y = margin;
+      let nextY = rect.top;
+      if (nextY + height > innerHeight - margin) nextY = innerHeight - height - margin;
+      if (nextY < margin) nextY = margin;
 
-      el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+      x = Math.round(nextX);
+      y = Math.round(nextY);
+      el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     },
 
     show() {
@@ -89,6 +138,8 @@ export function createPanel(root: ShadowRoot): Panel {
     },
     hide() {
       el.setAttribute('data-visible', 'false');
+      // 閉じたら固定を解く。次に開くときは選択要素の近傍から始める
+      pinned = false;
     },
     dim(on) {
       el.setAttribute('data-dim', String(on));
