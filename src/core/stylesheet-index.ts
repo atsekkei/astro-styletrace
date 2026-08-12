@@ -1,10 +1,3 @@
-/**
- * document.styleSheets を走査してルールを索引化する（§6.3）。
- *
- * hover ごとに全走査すると 60fps が出ないため、索引は 1 度だけ構築してキャッシュし、
- * HMR 側から invalidate() で捨てる（§7）。
- */
-
 import { resolveSource, type Source } from './resolve-source.js';
 import { specificity, splitTopLevel, type Specificity } from './specificity.js';
 
@@ -15,19 +8,15 @@ export type Condition = {
 
 export type IndexedRule = {
   rule: CSSStyleRule;
-  /** ネストを解決した、el.matches() に渡せる絶対セレクタ */
   selector: string;
-  /** CSSOM が返したままのセレクタ（`& .title` など）。表示用 */
   rawSelector: string;
   source: Source;
   conditions: Condition[];
   layer: string | null;
   specificity: Specificity;
-  /** 文書順。同詳細度のときの並び替えに使う */
   order: number;
 };
 
-/** 読めなかったシート（§6.3 ハマりどころ 1、§10）。黙って落とさず UI に出す */
 export type UnreadableSheet = {
   label: string;
   reason: string;
@@ -36,7 +25,6 @@ export type UnreadableSheet = {
 export type StyleIndex = {
   rules: IndexedRule[];
   unreadable: UnreadableSheet[];
-  /** @layer の宣言順。先に宣言された層ほど弱い */
   layerOrder: string[];
 };
 
@@ -47,7 +35,6 @@ export function getStyleIndex(): StyleIndex {
   return cache;
 }
 
-/** HMR 後に呼ぶ。次回 getStyleIndex() で再構築される */
 export function invalidateStyleIndex(): void {
   cache = null;
 }
@@ -61,7 +48,6 @@ export function buildStyleIndex(): StyleIndex {
   for (const sheet of Array.from(document.styleSheets)) {
     const source = resolveSource(sheet as CSSStyleSheet);
 
-    // caliper 自身のスタイルは索引に入れない
     const owner = sheet.ownerNode as HTMLElement | null;
     if (owner?.hasAttribute?.('data-caliper')) continue;
 
@@ -97,7 +83,6 @@ type Ctx = {
   source: Source;
   conditions: Condition[];
   layer: string | null;
-  /** 親のセレクタ（ネスト解決済み） */
   parent: string | null;
 };
 
@@ -112,7 +97,6 @@ function walk(
       const selector = resolveNesting(rule.selectorText, ctx.parent);
       visit(rule, ctx, rule.selectorText, selector);
 
-      // ネイティブ CSS ネスト: CSSStyleRule 自身が子ルールを持つ
       const nested = (rule as CSSStyleRule & { cssRules?: CSSRuleList }).cssRules;
       if (nested && nested.length) {
         walk(nested, { ...ctx, parent: selector }, visit, layerOrder);
@@ -120,7 +104,6 @@ function walk(
       continue;
     }
 
-    // `@layer a, b, c;` は層の順序だけを宣言する。中身は持たない
     const nameList = (rule as CSSRule & { nameList?: string[] }).nameList;
     if (nameList) {
       for (const name of Array.from(nameList)) {
@@ -131,16 +114,6 @@ function walk(
 
     const group = rule as CSSRule & { cssRules?: CSSRuleList; style?: CSSStyleDeclaration };
 
-    /**
-     * ネストした @media の直下に書いた宣言（CSSNestedDeclarations）。
-     *
-     *   .card-grid { gap: 1rem; @media (min-width: 48rem) { gap: 2rem; } }
-     *
-     * この `gap: 2rem` は selectorText を持たないルールとして現れる。拾わないと
-     * 候補から丸ごと落ち、§F2 の `+N` が「他に候補は無い」と嘘をつく。
-     *
-     * セレクタは親そのもの（既に解決済みなので resolveNesting に通さない）。
-     */
     if (!group.cssRules && group.style && ctx.parent) {
       visit(rule as CSSStyleRule, ctx, ctx.parent, ctx.parent);
       continue;
@@ -156,7 +129,6 @@ function walk(
 }
 
 function isStyleRule(rule: CSSRule): rule is CSSStyleRule {
-  // CSSStyleRule かつネストされた @media などではないこと
   return typeof (rule as CSSStyleRule).selectorText === 'string' && 'style' in rule;
 }
 
@@ -196,16 +168,9 @@ function conditionOf(rule: CSSRule): Condition | null {
   if (ctorName.includes('Scope')) {
     return { kind: 'scope', text: rule.cssText.split('{')[0]?.trim() ?? '@scope' };
   }
-  // @keyframes などは要素にマッチしないので条件として持たない
   return null;
 }
 
-/**
- * ネストされたセレクタを絶対セレクタへ。§6.3 ハマりどころ 2。
- *
- * `& .title` を親セレクタに置換する。親がセレクタリストのときは `:is()` で包む
- * ——これは詳細度の面でも CSS ネストの規定と一致する。
- */
 export function resolveNesting(selector: string, parent: string | null): string {
   if (!parent) return selector;
 
@@ -214,7 +179,6 @@ export function resolveNesting(selector: string, parent: string | null): string 
   return splitTopLevel(selector, ',')
     .map((part) => {
       if (part.includes('&')) return part.replace(/&/g, parentRef);
-      // `&` が省略されたネストは子孫結合子が補われる
       return `${parentRef} ${part}`;
     })
     .join(', ');

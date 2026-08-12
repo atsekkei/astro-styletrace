@@ -1,15 +1,8 @@
-/**
- * 2 要素間の距離（§6.5）。
- *
- * 座標は全て getBoundingClientRect() のビューポート座標。pageX 系と混ぜない。
- */
-
 export type Direction = 'left' | 'right' | 'up' | 'down';
 
 export type Axis = {
   gap: number;
   dir: Direction;
-  /** 計測線を引く座標（横方向なら from/to は x） */
   from: number;
   to: number;
 };
@@ -66,10 +59,6 @@ function insetsOf(outer: DOMRect, inner: DOMRect): Insets {
   };
 }
 
-/**
- * 2 区間の重なりの中心。重なっていなければ null。
- * 計測線をどの高さ（横方向なら）に引くかの決定に使う。
- */
 export function overlapCenter(
   a0: number,
   a1: number,

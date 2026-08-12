@@ -2,8 +2,29 @@
   "name": "astro-caliper",
   "version": "0.1.0",
   "type": "module",
-  "description": "hover でスタイルの出自と要素間距離を表示する Astro Integration",
+  "description": "Astro integration that shows where a style came from and how far apart elements are, without opening DevTools",
   "license": "MIT",
+  "author": "atsekkei",
+  "homepage": "https://github.com/atsekkei/astro-caliper#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atsekkei/astro-caliper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/atsekkei/astro-caliper/issues"
+  },
+  "keywords": [
+    "astro",
+    "astro-integration",
+    "astro-component",
+    "withastro",
+    "css",
+    "devtools",
+    "inspector",
+    "measure",
+    "spacing",
+    "dx"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

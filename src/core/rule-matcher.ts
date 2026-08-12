@@ -1,10 +1,3 @@
-/**
- * el → マッチしたルール[]。
- *
- * §6.4 の通り「勝者を断定しない」。詳細度はソート順のヒントに留め、
- * 計算値と一致する宣言値を持つ宣言に印を付けることで P1 を解決する。
- */
-
 import { compare, splitTopLevel, type Specificity } from './specificity.js';
 import { getStyleIndex, type Condition, type IndexedRule } from './stylesheet-index.js';
 import type { Source } from './resolve-source.js';
@@ -23,7 +16,6 @@ export type MatchedRule = {
   layer: string | null;
   specificity: Specificity;
   declarations: Declaration[];
-  /** インラインスタイル（el.style）は別枠で最上位に置く */
   inline: boolean;
 };
 
@@ -78,7 +70,7 @@ function inlineRule(el: Element): MatchedRule | null {
   return {
     selector: 'style="…"',
     rawSelector: 'style="…"',
-    source: { label: 'inline style', raw: '' },
+    source: { label: 'style attribute', raw: '' },
     conditions: [],
     layer: null,
     specificity: [1, 0, 0],
@@ -87,13 +79,6 @@ function inlineRule(el: Element): MatchedRule | null {
   };
 }
 
-/**
- * 宣言は cssText から読む。
- *
- * style.item() で列挙すると、`margin: 0 0 var(--space-s)` のように var() を含む
- * ショートハンドが「値が空の個別プロパティ」に展開されてしまい、宣言値が消える。
- * §F2 の declared 行は「書いたとおりの値」でなければ意味がないので、authored 側を採る。
- */
 function readDeclarations(style: CSSStyleDeclaration): Declaration[] {
   const out: Declaration[] = [];
 
@@ -129,12 +114,10 @@ function safeMatches(el: Element, selector: string): boolean {
   try {
     return el.matches(selector);
   } catch {
-    // `&` が残ったセレクタや、ブラウザ未対応の記法。取りこぼしとして無視する
     return false;
   }
 }
 
-/** 条件付きグループが今この瞬間に有効か（§6.3） */
 function isActive(conditions: Condition[]): boolean {
   for (const condition of conditions) {
     if (condition.kind === 'media') {
@@ -142,7 +125,6 @@ function isActive(conditions: Condition[]): boolean {
       try {
         if (!matchMedia(condition.text).matches) return false;
       } catch {
-        /* 解釈できない条件は有効とみなす */
       }
       continue;
     }
@@ -150,16 +132,13 @@ function isActive(conditions: Condition[]): boolean {
       try {
         if (condition.text && !CSS.supports(condition.text)) return false;
       } catch {
-        /* 同上 */
       }
     }
-    // @container / @scope は要素文脈に依存するため、ここでは判定しない
   }
   return true;
 }
 
 function layerRank(layer: string | null, order: string[]): number {
-  // 層に属さない宣言は、名前付き層より強い
   if (layer === null) return order.length + 1;
   const at = order.indexOf(layer);
   return at < 0 ? 0 : at;

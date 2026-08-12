@@ -1,16 +1,7 @@
-/**
- * 詳細度の計算。ブラウザが API を公開していないため自前で持つ。
- *
- * §6.4 の通り、これは「勝者の断定」には使わない。あくまでソート順のヒント。
- * `:where()` は 0、`:is()` / `:not()` / `:has()` は引数中の最大値、という
- * §6.3 のハマりどころ 3 番だけは正しく扱う。
- */
-
 export type Specificity = [number, number, number];
 
 const ZERO: Specificity = [0, 0, 0];
 
-/** 引数の詳細度を「その中の最大値」として扱う関数擬似クラス。 */
 const MAX_OF_ARGS = new Set([
   'is',
   'matches',
@@ -21,7 +12,6 @@ const MAX_OF_ARGS = new Set([
   'has',
 ]);
 
-/** 引数を詳細度に数えない関数擬似クラス。 */
 const ZERO_ARGS = new Set(['where']);
 
 export function compare(a: Specificity, b: Specificity): number {
@@ -32,7 +22,6 @@ export function formatSpecificity(s: Specificity): string {
   return `${s[0]},${s[1]},${s[2]}`;
 }
 
-/** セレクタリスト全体の詳細度 = 各セレクタの最大値。 */
 export function specificity(selectorList: string): Specificity {
   let best: Specificity = ZERO;
   for (const part of splitTopLevel(selectorList, ',')) {
@@ -73,7 +62,6 @@ function computeCompound(selector: string): Specificity {
     }
 
     if (c === ':') {
-      // 疑似要素は c 列（要素側）
       if (s[i + 1] === ':') {
         const end = skipIdent(s, i + 2);
         i = s[end] === '(' ? skipBalanced(s, end, '(', ')') : end;
@@ -89,7 +77,6 @@ function computeCompound(selector: string): Specificity {
         const args = s.slice(nameEnd + 1, argEnd - 1);
 
         if (ZERO_ARGS.has(name)) {
-          // :where() は常に 0
         } else if (MAX_OF_ARGS.has(name)) {
           out = add(out, specificity(args));
         } else if (name === 'nth-child' || name === 'nth-last-child') {
@@ -103,7 +90,6 @@ function computeCompound(selector: string): Specificity {
         continue;
       }
 
-      // 単一コロンで書かれた歴史的な疑似要素（:before など）は c 列
       if (name === 'before' || name === 'after' || name === 'first-line' || name === 'first-letter') {
         out[2] += 1;
       } else {
@@ -114,7 +100,6 @@ function computeCompound(selector: string): Specificity {
     }
 
     if (c === '*' || c === '&') {
-      // ユニバーサルと、解決しきれなかった `&` は 0
       i += 1;
       continue;
     }
@@ -126,7 +111,6 @@ function computeCompound(selector: string): Specificity {
 
     if (isIdentStart(c)) {
       const end = skipIdent(s, i);
-      // 名前空間 `ns|el` は要素側だけ数える
       if (s[end] === '|' && s[end + 1] !== '=') {
         i = end + 1;
         continue;
@@ -142,7 +126,6 @@ function computeCompound(selector: string): Specificity {
   return out;
 }
 
-/** `:nth-child(2n of .foo)` の `.foo` を取り出す。無ければ null。 */
 function splitOf(args: string): string | null {
   const m = /\bof\b/.exec(args);
   return m ? args.slice(m.index + 2).trim() : null;
@@ -200,7 +183,6 @@ function skipBalanced(s: string, i: number, open: string, close: string): number
   return i;
 }
 
-/** 括弧・引用符の内側を無視して区切る。 */
 export function splitTopLevel(input: string, sep: string): string[] {
   const out: string[] = [];
   let depth = 0;

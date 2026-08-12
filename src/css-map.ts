@@ -1,10 +1,3 @@
-/**
- * PostCSS で `selector → 行番号` を作る Vite plugin（§6.9 M6）。★Vite 依存
- *
- * transform フックは「その CSS のソース文字列」を持っている唯一の場所。
- * ここで行番号を控えておかないと、ブラウザ側の CSSOM からは二度と辿れない。
- */
-
 import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import postcss from 'postcss';
@@ -26,7 +19,6 @@ export function createCssMapStore(): CssMapStore {
     plugin() {
       return {
         name: 'astro-caliper:css-map',
-        // 他のプラグインが CSS を書き換える前の、書いたとおりの行に合わせる
         enforce: 'pre',
         apply: 'serve',
         transform(code, id) {
@@ -52,7 +44,6 @@ function collect(code: string, id: string): Record<string, number> | null {
 
   const file = fileOf(id);
 
-  // `.astro` の `<style>` は 1 行に潰されて渡ってくるので、元ファイルから読み直す
   const block = PLAIN_STYLE.has(extname(file)) ? { code, offset: 0 } : styleBlock(file, id);
   if (!block) return null;
 
@@ -60,7 +51,6 @@ function collect(code: string, id: string): Record<string, number> | null {
   try {
     root = postcss.parse(block.code, { from: file });
   } catch {
-    // 未コンパイルの scss などは読めなくて当然。行が出ないだけで害はない
     return null;
   }
 
@@ -74,7 +64,6 @@ function collect(code: string, id: string): Record<string, number> | null {
     const key = normalizeSelector(rule.selector);
     if (key && out[key] === undefined) out[key] = at;
 
-    // `a, b { }` は CSSOM 側が片方だけを返すこともあるので、単体でも引けるようにする
     if (rule.selectors.length > 1) {
       for (const part of rule.selectors) {
         const single = normalizeSelector(part);
@@ -90,13 +79,6 @@ function fileOf(id: string): string {
   return id.split('?')[0] ?? id;
 }
 
-/**
- * `.astro` の `<style>` ブロックを元ファイルから切り出す。
- *
- * transform に渡ってくる code は Astro がコンパイルした後のもので、改行が
- * 落ちて全ルールが同じ行になる。行番号が欲しいのだから、書いたままのソースを読む。
- * セレクタもスコープ属性が付く前の形になるが、正規化で吸収する。
- */
 function styleBlock(file: string, id: string): { code: string; offset: number } | null {
   const index = Number(/[?&]index=(\d+)/.exec(id)?.[1] ?? 0);
 
@@ -121,7 +103,6 @@ function styleBlock(file: string, id: string): { code: string; offset: number } 
 
   return {
     code: source.slice(start + 1, end),
-    // 切り出した 1 行目は `<style>` タグと同じ行にある
     offset: source.slice(0, start + 1).split('\n').length - 1,
   };
 }

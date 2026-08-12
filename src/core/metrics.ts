@@ -1,23 +1,10 @@
-/**
- * declared / computed / measured を 1 ブロックに揃える（§F2）。
- *
- * 3 行並べることが仕様の核心。declared と computed の乖離が P2 を解決し、
- * computed と measured の乖離（margin 相殺、flex の分配、gap と justify-content の
- * 競合）がバグの発見点になる。
- *
- * 一致していても畳まない。ブロックの形が固定であることのほうが、数行ぶんの
- * 高さより価値がある（§F2）。
- */
-
 import { findInherited } from './inherit.js';
 import type { Source } from './resolve-source.js';
 import type { MatchedRule } from './rule-matcher.js';
 import { fmt, parsePx } from './units.js';
 
-/** その longhand を担っている宣言 1 件 */
 export type Candidate = {
   value: string;
-  /** 宣言に使われていたプロパティ名。ショートハンドで書かれていれば longhand と異なる */
   property: string;
   source: Source;
   selector: string;
@@ -25,24 +12,14 @@ export type Candidate = {
 
 export type Metric = {
   property: string;
-  /** 詳細度で選んだ最有力候補。断定ではない（§6.4） */
   declared: Candidate;
-  /** 同じ longhand を担う他の候補。`+N` の中身（§F2） */
   others: Candidate[];
-  /** 継承で得た場合、宣言を持っていた祖先の記述。`body` */
   inheritedFrom: string | null;
-  /** 唯一の真実（§6.4） */
   computed: string;
-  /** 実測値。算出できないプロパティでは null */
   measured: number | null;
-  /** computed と measured が食い違っている。バグの発見点 */
   diverged: boolean;
 };
 
-/**
- * 表示するプロパティと、その順序（§F2）。
- * ノギスなので寸法から。width / height は宣言があるときだけ立つので最後。
- */
 const PROPERTIES = [
   'margin-top',
   'margin-right',
@@ -60,10 +37,8 @@ const PROPERTIES = [
   'height',
 ];
 
-/** 宣言が無ければ継承元を遡るプロパティ。継承しないものを遡っても意味がない */
 const INHERITED = new Set(['font-size', 'line-height']);
 
-/** ショートハンド → その宣言が担う longhand */
 const SHORTHANDS: Record<string, string[]> = {
   margin: ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'],
   'margin-block': ['margin-top', 'margin-bottom'],
@@ -89,7 +64,6 @@ export function buildMetrics(
     let candidates = findCandidates(rules, property);
     let inheritedFrom: string | null = null;
 
-    // 宣言があるものだけを出す。無いプロパティは直しに行く先が無い（§F2）
     if (candidates.length === 0) {
       if (!INHERITED.has(property)) continue;
 
@@ -105,7 +79,6 @@ export function buildMetrics(
 
     const raw = computed.getPropertyValue(property).trim();
     const computedPx = parsePx(raw);
-    // 小数は 1 桁まで（§5）。それ以上は視覚ノイズ
     const computedValue = computedPx === null ? raw : `${fmt(computedPx)}px`;
 
     const measuredValue = measured[property] ?? null;
@@ -126,13 +99,6 @@ export function buildMetrics(
   return out;
 }
 
-/**
- * その longhand を担っている宣言を、強い順に全て返す。
- *
- * rules は既にカスケード順にソートされているので先頭が最有力候補。
- * §6.4 の通りこれは断定ではないため、2 件目以降も捨てずに返す
- * （UI では `+N` として件数だけ出す。§F2）。
- */
 function findCandidates(rules: MatchedRule[], property: string): Candidate[] {
   const out: Candidate[] = [];
 
@@ -155,20 +121,24 @@ function covers(declared: string, property: string): boolean {
   return SHORTHANDS[declared]?.includes(property) ?? false;
 }
 
-/**
- * getBoundingClientRect() の差分から実測値を出す。
- *
- * margin は「隣接する兄弟、または親のコンテンツボックスとの実際の隙間」。
- * margin 相殺や gap との競合はここに現れる。
- */
 function measureAll(
   el: Element,
   rect: DOMRect,
   computed: CSSStyleDeclaration,
 ): Record<string, number> {
   const out: Record<string, number> = {
-    width: rect.width,
-    height: rect.height,
+    width:
+      rect.width -
+      num(computed.borderLeftWidth) -
+      num(computed.borderRightWidth) -
+      num(computed.paddingLeft) -
+      num(computed.paddingRight),
+    height:
+      rect.height -
+      num(computed.borderTopWidth) -
+      num(computed.borderBottomWidth) -
+      num(computed.paddingTop) -
+      num(computed.paddingBottom),
   };
 
   const parent = el.parentElement;
@@ -177,14 +147,40 @@ function measureAll(
     const before = previousBox(el);
     const after = nextBox(el);
 
-    out['margin-top'] =
-      before && before.bottom <= rect.top ? rect.top - before.bottom : rect.top - content.top;
-    out['margin-bottom'] =
-      after && after.top >= rect.bottom ? after.top - rect.bottom : content.bottom - rect.bottom;
-    out['margin-left'] =
-      before && before.right <= rect.left ? rect.left - before.right : rect.left - content.left;
-    out['margin-right'] =
-      after && after.left >= rect.right ? after.left - rect.right : content.right - rect.right;
+    const own = (value: number, margin: string) => (num(margin) === 0 ? null : value);
+
+    set(
+      out,
+      'margin-top',
+      own(
+        before && before.bottom <= rect.top ? rect.top - before.bottom : rect.top - content.top,
+        computed.marginTop,
+      ),
+    );
+    set(
+      out,
+      'margin-bottom',
+      own(
+        after && after.top >= rect.bottom ? after.top - rect.bottom : content.bottom - rect.bottom,
+        computed.marginBottom,
+      ),
+    );
+    set(
+      out,
+      'margin-left',
+      own(
+        before && before.right <= rect.left ? rect.left - before.right : rect.left - content.left,
+        computed.marginLeft,
+      ),
+    );
+    set(
+      out,
+      'margin-right',
+      own(
+        after && after.left >= rect.right ? after.left - rect.right : content.right - rect.right,
+        computed.marginRight,
+      ),
+    );
   }
 
   const display = computed.display;
@@ -198,6 +194,10 @@ function measureAll(
 }
 
 type Box = { top: number; right: number; bottom: number; left: number };
+
+function set(out: Record<string, number>, property: string, value: number | null): void {
+  if (value !== null) out[property] = value;
+}
 
 function contentBox(el: Element): Box {
   const rect = el.getBoundingClientRect();
@@ -220,10 +220,6 @@ function nextBox(el: Element): DOMRect | null {
   return sibling ? sibling.getBoundingClientRect() : null;
 }
 
-/**
- * 子要素の実際の隙間。同じ行 / 同じ列に並んでいる隣接ペアだけを見る。
- * 隙間がばらついている場合は最小値を返す（justify-content に食われた側が出る）。
- */
 function measureGaps(el: Element): { row: number | null; column: number | null } {
   const boxes = Array.from(el.children).map((child) => child.getBoundingClientRect());
   if (boxes.length < 2) return { row: null, column: null };
@@ -263,7 +259,6 @@ function num(value: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** 実測値の表示用 */
 export function formatMeasured(value: number): string {
   return `${fmt(value)}px`;
 }

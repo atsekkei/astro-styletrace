@@ -1,10 +1,3 @@
-/**
- * スタイル出自パネル（§F2）。
- *
- * プロパティ 1 件が 1 ブロック。ブロックは常に同じ形をしている
- * （declared / computed / measured を一致していても畳まない）。
- */
-
 import { lineFor } from '../core/css-map.js';
 import { formatMeasured, type Candidate, type Metric } from '../core/metrics.js';
 import { editorTarget, openInEditor } from '../core/open-in-editor.js';
@@ -14,7 +7,6 @@ export type PanelContent = {
   target: string;
   rect: DOMRect;
   metrics: Metric[];
-  /** transform 適用中（computed と measured がずれる。§6.5） */
   transformed: boolean;
 };
 
@@ -23,7 +15,6 @@ export type Panel = {
   place(rect: DOMRect): void;
   show(): void;
   hide(): void;
-  /** 探索中の減光。消さずに落とす（§F4） */
   dim(on: boolean): void;
   destroy(): void;
 };
@@ -46,21 +37,17 @@ export function createPanel(root: ShadowRoot): Panel {
   el.append(head, body, hint);
   root.appendChild(el);
 
-  /** `+N` を開いているプロパティ。要素が変われば畳み直す */
   let expanded = new Set<string>();
   let last: PanelContent | null = null;
 
-  /** 現在位置。transform で持つ（レイアウトを起こさない） */
   let x = 0;
   let y = 0;
-  /** 見出しをドラッグして置き直した。以後 place() は効かせない */
   let pinned = false;
 
   function moveTo(nextX: number, nextY: number) {
     const margin = 12;
     const width = el.offsetWidth || 400;
     const height = el.offsetHeight || 200;
-    // 掴んだまま画面外へ出すと戻せなくなる。常に全体を収める
     x = Math.min(Math.max(nextX, margin), Math.max(margin, innerWidth - width - margin));
     y = Math.min(Math.max(nextY, margin), Math.max(margin, innerHeight - height - margin));
     el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
@@ -68,14 +55,12 @@ export function createPanel(root: ShadowRoot): Panel {
 
   head.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
-    // 見出しに置かれたボタン（将来分を含む）はドラッグの取っ手にしない
     if (event.target instanceof Element && event.target.closest('button')) return;
 
     const offsetX = event.clientX - x;
     const offsetY = event.clientY - y;
     pinned = true;
     el.dataset.dragging = 'true';
-    // テキスト選択・ページ側のドラッグ開始を止める
     event.preventDefault();
     head.setPointerCapture(event.pointerId);
 
@@ -111,9 +96,7 @@ export function createPanel(root: ShadowRoot): Panel {
       render();
     },
 
-    /** hover 要素の近傍へ。ビューポート端で反転させる（§5） */
     place(rect) {
-      // 自分で置いた位置は動かさない。選択を変えるたびに戻ると避けた意味がない
       if (pinned) return;
 
       const width = el.offsetWidth || 400;
@@ -138,7 +121,6 @@ export function createPanel(root: ShadowRoot): Panel {
     },
     hide() {
       el.setAttribute('data-visible', 'false');
-      // 閉じたら固定を解く。次に開くときは選択要素の近傍から始める
       pinned = false;
     },
     dim(on) {
@@ -159,7 +141,6 @@ function renderHead(head: HTMLElement, content: PanelContent) {
   const name = document.createElement('b');
   name.textContent = content.target;
 
-  // width / height は宣言があるときだけ行が立つ。実寸はここに常時出す（§F2）
   const size = document.createElement('span');
   size.className = 'cal-size';
   size.textContent = `${fmt(content.rect.width)} × ${fmt(content.rect.height)}`;
@@ -170,8 +151,6 @@ function renderHead(head: HTMLElement, content: PanelContent) {
   const badges = document.createElement('div');
   badges.className = 'cal-badges';
 
-  // 出すのは「この要素の今の状態」だけ。要素によらず同じ内容が出続けるものは
-  // 常時点いている飾りにしかならない（cid / 解析不能シート / 選択中であること）
   if (content.transformed) badges.appendChild(badge('transformed', 'warn'));
 
   head.appendChild(badges);
@@ -250,7 +229,6 @@ function renderBlockHead(
   selector.title = metric.declared.selector;
   el.appendChild(selector);
 
-  // 件数が付いていない行は候補が 1 つしかないので、そのまま信じてよい（§F2）
   if (metric.others.length > 0) {
     const more = document.createElement('button');
     more.type = 'button';
@@ -268,13 +246,10 @@ function renderBlockHead(
   return el;
 }
 
-/** 常に同じ形（§F2）。measured が取れないときも declared / computed の位置は動かさない */
 function renderRows(metric: Metric): HTMLElement {
   const rows = document.createElement('dl');
   rows.className = 'cal-rows';
 
-  // ショートハンドで書かれていた場合、その名前は値の側に添える
-  // （ラベル列を広げると値の列が潰れる）
   const via =
     metric.declared.property === metric.property ? null : `via ${metric.declared.property}`;
 
@@ -312,10 +287,6 @@ function row(
   return [dt, dd];
 }
 
-/**
- * 出自リンク。ブロックごとに持つ（§F3）。
- * リセット CSS + グローバル + scoped style が混ざるので、パネル単位ではまとめられない。
- */
 function renderSource(candidate: Candidate): HTMLElement {
   const file = editorTarget(candidate.source);
 
@@ -327,7 +298,6 @@ function renderSource(candidate: Candidate): HTMLElement {
     return el;
   }
 
-  // 行が引けるならそこへ、引けなければファイル先頭へ（§6.9）
   const line = lineFor(candidate.source, candidate.selector);
   const target = line === null ? file : `${file}:${line}`;
 

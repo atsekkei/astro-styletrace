@@ -1,10 +1,3 @@
-/**
- * ヒットテスト（§6.6）。
- *
- * オーバーレイには pointer-events: none が付いているので本来ここに現れないが、
- * 漏れると自分自身を計測して無限に混乱するため、属性でも二重に除外する（§10）。
- */
-
 export function pick(x: number, y: number): Element | null {
   for (const el of document.elementsFromPoint(x, y)) {
     if (isCaliper(el)) continue;
@@ -16,22 +9,16 @@ export function pick(x: number, y: number): Element | null {
 function isCaliper(el: Element): boolean {
   if (el.hasAttribute('data-caliper')) return true;
   if (el.closest('[data-caliper]')) return true;
-  // Astro Dev Toolbar 本体（Shadow DOM のためホスト要素として 1 つ返る）
   if (el.closest('astro-dev-toolbar')) return true;
   return false;
 }
 
-/** Alt + ↑ / ↓ 用。移動できないときは null */
 export function parentOf(el: Element): Element | null {
   const parent = el.parentElement;
   if (!parent || isCaliper(parent)) return null;
   return parent;
 }
 
-/**
- * ↓ は「今のポインタ位置を含む子」へ降りる。
- * 単純に firstElementChild を辿ると、見えていない要素に飛んでしまうため。
- */
 export function childOf(el: Element, x: number, y: number): Element | null {
   let fallback: Element | null = null;
 
@@ -46,7 +33,6 @@ export function childOf(el: Element, x: number, y: number): Element | null {
   return fallback;
 }
 
-/** 表示用の要素名。`div.card-grid#main` */
 export function describe(el: Element): string {
   const tag = el.tagName.toLowerCase();
   const id = el.id ? `#${el.id}` : '';

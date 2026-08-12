@@ -1,21 +1,12 @@
-/**
- * ShadowRoot に流し込むスタイル（§5）。
- *
- * .css ファイルにすると Vite が dev server 経由でページ全体に注入してしまうため
- * （ShadowRoot に閉じ込められない）、文字列として持つ。
- *
- * トーン: 明色・無彩色 + 1 色。読む対象ではなく確かめる対象なので、装飾を持たせない。
- */
-
 export const TOKENS = {
   ink: '#000000',
   ink2: '#4D4D4D',
   ink3: '#808080',
   rule: '#D9D9D9',
   accent: '#0000FF',
+  warn: '#D40000',
   surface: '#F2F2F2CC',
 
-  /** オーバーレイ。パネルと同じ体系に寄せる（§5） */
   margin: 'rgba(0, 0, 255, 0.10)',
   padding: 'rgba(0, 0, 255, 0.20)',
   overlapFill: 'rgba(0, 0, 255, 0.12)',
@@ -23,7 +14,6 @@ export const TOKENS = {
   labelText: '#FFFFFF',
 } as const;
 
-/** 余白は全てこの倍数（§5） */
 const U = 4;
 
 export const CSS = `
@@ -33,6 +23,7 @@ export const CSS = `
   --cal-ink-3: ${TOKENS.ink3};
   --cal-rule: ${TOKENS.rule};
   --cal-accent: ${TOKENS.accent};
+  --cal-warn: ${TOKENS.warn};
   --cal-surface: ${TOKENS.surface};
 
   --cal-font: Inter, system-ui, -apple-system, "Hiragino Sans", sans-serif;
@@ -58,8 +49,6 @@ export const CSS = `
   fill: ${TOKENS.labelText};
   user-select: none;
 }
-
-/* ---- ON インジケータ（§F4） ---- */
 
 .cal-indicator {
   position: fixed;
@@ -100,8 +89,6 @@ export const CSS = `
   font-weight: 600;
 }
 
-/* ---- パネル ---- */
-
 .cal-panel {
   position: fixed;
   top: 0;
@@ -114,7 +101,6 @@ export const CSS = `
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: ${U * 4}px;
-  /* 明色パネルが明色ページの上に出る。90% + blur だけでは輪郭が消える（§5） */
   border: 1px solid var(--cal-rule);
   background: var(--cal-surface);
   backdrop-filter: blur(16px);
@@ -124,9 +110,7 @@ export const CSS = `
   font-family: var(--cal-font);
   font-size: var(--cal-size);
   line-height: 1.2;
-  /* 等幅をやめた以上これが無いと hover 移動中に桁が踊る（§5 / §8） */
   font-variant-numeric: tabular-nums;
-  /* 既定は非表示。透明なまま板が残るとページのクリックを奪う（§F4） */
   opacity: 0;
   pointer-events: none;
   transform: translate3d(0, 0, 0);
@@ -138,10 +122,6 @@ export const CSS = `
   pointer-events: auto;
 }
 
-/*
- * Alt 押下中（探索中）は視界を空ける。消してしまうと押すたびに現れ直して落ち着かず、
- * 位置も見失う。落とすだけにして、下の要素は測れるようにイベントを通す（§F4）
- */
 .cal-panel[data-visible="true"][data-dim="true"] {
   opacity: 0.2;
   pointer-events: none;
@@ -153,8 +133,6 @@ export const CSS = `
   }
 }
 
-/* ---- 見出し ---- */
-
 .cal-head {
   position: sticky;
   top: 0;
@@ -162,7 +140,6 @@ export const CSS = `
   padding: ${U * 4}px;
   border-bottom: 1px dashed var(--cal-rule);
   background: var(--cal-surface);
-  /* パネルを持ち運ぶ取っ手。ポインタ操作をブラウザのスクロールに渡さない */
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -213,13 +190,10 @@ export const CSS = `
   user-select: none;
 }
 
-.cal-badge[data-tone="warn"],
-.cal-badge[data-tone="pin"] {
-  border-color: var(--cal-accent);
-  color: var(--cal-accent);
+.cal-badge[data-tone="warn"] {
+  border-color: var(--cal-warn);
+  color: var(--cal-warn);
 }
-
-/* ---- 本体 ---- */
 
 .cal-body {
   display: flex;
@@ -233,8 +207,6 @@ export const CSS = `
   color: var(--cal-ink-2);
   font-size: var(--cal-size-s);
 }
-
-/* ---- プロパティ 1 件（§F2） ---- */
 
 .cal-block {
   display: flex;
@@ -267,7 +239,6 @@ export const CSS = `
   font-size: var(--cal-size-s);
 }
 
-/* 「表示している 1 件が外れているかもしれない」という信号（§F2） */
 .cal-more {
   flex: none;
   padding: 0 ${U}px;
@@ -287,7 +258,6 @@ export const CSS = `
   color: var(--cal-accent);
 }
 
-/* declared / computed / measured がひとまとまりであることを示す縦罫（§5） */
 .cal-rows {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -313,13 +283,10 @@ export const CSS = `
   font-size: var(--cal-size-s);
 }
 
-/* computed と measured の乖離がバグの発見点（§F2） */
 .cal-block[data-diverged="true"] .cal-val[data-row="measured"] {
-  color: var(--cal-accent);
+  color: var(--cal-warn);
   font-weight: 600;
 }
-
-/* ---- 出自リンク（§F3） ---- */
 
 .cal-source {
   align-self: flex-start;
@@ -337,7 +304,6 @@ export const CSS = `
   cursor: pointer;
 }
 
-/* 色だけで示さない（§8）。hover / focus で下線を出す */
 @media (hover: hover) and (pointer: fine) {
   .cal-source:hover {
     text-decoration: underline;
@@ -360,8 +326,6 @@ export const CSS = `
   color: var(--cal-ink-3);
   text-decoration: line-through;
 }
-
-/* ---- 他の候補（+N の展開） ---- */
 
 .cal-others {
   display: flex;
@@ -388,8 +352,6 @@ export const CSS = `
   color: var(--cal-ink-3);
   overflow-wrap: anywhere;
 }
-
-/* ---- ヒント ---- */
 
 .cal-hint {
   margin: 0;
