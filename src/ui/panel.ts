@@ -16,7 +16,6 @@ export type PanelContent = {
   metrics: Metric[];
   /** transform 適用中（computed と measured がずれる。§6.5） */
   transformed: boolean;
-  pinned: boolean;
 };
 
 export type Panel = {
@@ -24,6 +23,8 @@ export type Panel = {
   place(rect: DOMRect): void;
   show(): void;
   hide(): void;
+  /** 探索中の減光。消さずに落とす（§F4） */
+  dim(on: boolean): void;
   destroy(): void;
 };
 
@@ -40,7 +41,7 @@ export function createPanel(root: ShadowRoot): Panel {
 
   const hint = document.createElement('p');
   hint.className = 'cal-hint';
-  hint.textContent = 'Alt measure · Alt+Click pin · Esc unpin · Alt+↑↓ parent/child';
+  hint.textContent = 'Alt+Click select · Esc / outside click close · Alt+↑↓ parent/child';
 
   el.append(head, body, hint);
   root.appendChild(el);
@@ -89,6 +90,9 @@ export function createPanel(root: ShadowRoot): Panel {
     hide() {
       el.setAttribute('data-visible', 'false');
     },
+    dim(on) {
+      el.setAttribute('data-dim', String(on));
+    },
     destroy() {
       el.remove();
     },
@@ -115,15 +119,14 @@ function renderHead(head: HTMLElement, content: PanelContent) {
   const badges = document.createElement('div');
   badges.className = 'cal-badges';
 
-  // 出すのは「この要素の今の状態」だけ。cid と解析不能シートは要素によらず
-  // 同じ内容が出続けるので、常時点いている飾りにしかならない
-  if (content.pinned) badges.appendChild(badge('pinned', 'pin'));
+  // 出すのは「この要素の今の状態」だけ。要素によらず同じ内容が出続けるものは
+  // 常時点いている飾りにしかならない（cid / 解析不能シート / 選択中であること）
   if (content.transformed) badges.appendChild(badge('transformed', 'warn'));
 
   head.appendChild(badges);
 }
 
-function badge(text: string, tone?: 'warn' | 'pin'): HTMLElement {
+function badge(text: string, tone?: 'warn'): HTMLElement {
   const el = document.createElement('span');
   el.className = 'cal-badge';
   if (tone) el.dataset.tone = tone;

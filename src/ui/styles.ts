@@ -126,14 +126,25 @@ export const CSS = `
   line-height: 1.2;
   /* 等幅をやめた以上これが無いと hover 移動中に桁が踊る（§5 / §8） */
   font-variant-numeric: tabular-nums;
-  pointer-events: auto;
+  /* 既定は非表示。透明なまま板が残るとページのクリックを奪う（§F4） */
   opacity: 0;
+  pointer-events: none;
   transform: translate3d(0, 0, 0);
   transition: opacity 120ms ease-out;
 }
 
 .cal-panel[data-visible="true"] {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/*
+ * Alt 押下中（探索中）は視界を空ける。消してしまうと押すたびに現れ直して落ち着かず、
+ * 位置も見失う。落とすだけにして、下の要素は測れるようにイベントを通す（§F4）
+ */
+.cal-panel[data-visible="true"][data-dim="true"] {
+  opacity: 0.2;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

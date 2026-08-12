@@ -9,8 +9,7 @@ import { loadCssMap } from './css-map.js';
 import { describe, childOf, parentOf, pick } from './hit-test.js';
 import { matchCached, resetInheritCache } from './inherit.js';
 import { measure, type MeasureResult } from './measure.js';
-import { buildMetrics, type Metric } from './metrics.js';
-import type { MatchResult } from './rule-matcher.js';
+import { buildMetrics } from './metrics.js';
 import { invalidateStyleIndex } from './stylesheet-index.js';
 import { createOverlay, type BoxModel, type Overlay } from '../ui/overlay.js';
 import { createPanel, type Panel } from '../ui/panel.js';
@@ -40,15 +39,18 @@ export function createInspector(canvas: ShadowRoot): Inspector {
   const pointer = { x: -1, y: -1 };
   let target: Element | null = null;
   let traversal: Element | null = null;
-  let pinned: Element | null = null;
+
+  /** Alt + Click で選んだ要素。パネルの中身も距離計測の基準もこれ（§F4） */
+  let selected: Element | null = null;
+  let selectionDirty = false;
 
   let box: BoxModel | null = null;
-  let match: MatchResult | null = null;
-  let metrics: Metric[] = [];
-  let transformed = false;
   let placedKey = '';
 
-  const resizeObserver = new ResizeObserver(() => schedule());
+  const resizeObserver = new ResizeObserver(() => {
+    selectionDirty = true; // 選択要素の寸法が変わった。実測値を取り直す
+    schedule();
+  });
   const styleObserver = new MutationObserver(() => {
     invalidateStyleIndex();
     resetInheritCache();
@@ -66,6 +68,39 @@ export function createInspector(canvas: ShadowRoot): Inspector {
   function commit() {
     if (!active) return;
 
+    // HMR で選択要素ごと差し替わることがある
+    if (selected && !selected.isConnected) select(null);
+
+    // ---- パネル（選択に従う。hover では書き換えない。§F4） ----
+    const selectedRect = selected ? selected.getBoundingClientRect() : null;
+
+    if (!selected || !selectedRect) {
+      panel.hide();
+    } else {
+      if (selectionDirty) {
+        selectionDirty = false;
+        const computed = getComputedStyle(selected);
+        // 継承の遡り（§F2）で祖先も引くため、マッチ結果はキャッシュ経由で取る
+        const match = matchCached(selected);
+        panel.update({
+          target: describe(selected),
+          rect: selectedRect,
+          metrics: buildMetrics(selected, selectedRect, computed, match.rules),
+          transformed: computed.transform !== 'none',
+        });
+      }
+
+      const key = `${Math.round(selectedRect.left)},${Math.round(selectedRect.top)},${Math.round(selectedRect.width)}`;
+      if (key !== placedKey) {
+        placedKey = key;
+        panel.place(selectedRect);
+      }
+      panel.show();
+      // 探索中は視界を空ける。消さずに落とすだけ（位置を見失わないため。§F4）
+      panel.dim(altHeld);
+    }
+
+    // ---- オーバーレイ（hover に従う） ----
     if (!altHeld) {
       overlay.clear();
       return;
@@ -80,57 +115,36 @@ export function createInspector(canvas: ShadowRoot): Inspector {
     const changed = next !== target;
     target = next;
 
-    // ---- 読み取り ----
-    const rect = target.getBoundingClientRect();
-    const pinnedRect = pinned && pinned.isConnected ? pinned.getBoundingClientRect() : null;
+    const rect = next.getBoundingClientRect();
+    if (changed || !box) box = readBox(getComputedStyle(next));
 
-    if (changed || !box) {
-      const computed = getComputedStyle(target);
-      box = readBox(computed);
-      transformed = computed.transform !== 'none';
-      // 継承の遡り（§F2）で祖先も引くため、マッチ結果はキャッシュ経由で取る
-      match = matchCached(target);
-      metrics = buildMetrics(target, rect, computed, match.rules);
-    }
-
-    const result: MeasureResult | null = pinnedRect ? measure(pinnedRect, rect) : null;
-
-    // ---- 書き込み ----
-    if (changed && match) {
-      panel.update({
-        target: describe(target),
-        rect,
-        metrics,
-        transformed,
-        pinned: pinned === target,
-      });
-    }
+    // 選択要素そのものを hover しているときは測る相手がいない
+    const result: MeasureResult | null =
+      selectedRect && next !== selected ? measure(selectedRect, rect) : null;
 
     overlay.render({
       hover: { rect, box },
-      pinned: pinnedRect ? { rect: pinnedRect } : null,
+      pinned: selectedRect ? { rect: selectedRect } : null,
       result,
     });
-
-    const key = `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)}`;
-    if (key !== placedKey) {
-      placedKey = key;
-      panel.place(rect);
-    }
-    panel.show();
   }
 
   function setAlt(next: boolean) {
     if (altHeld === next) return;
     altHeld = next;
-    if (altHeld) schedule();
-    else overlay.clear(); // パネルは最後の内容を保持する（§F4）
+    // 離した側も schedule する。パネルの減光を戻す必要がある（§F4）
+    schedule();
+    if (!altHeld) overlay.clear();
   }
 
-  function pin(el: Element | null) {
+  /** 選択 = パネルを開くこと。解除 = 閉じること。この 2 つは常に一致する（§F4） */
+  function select(el: Element | null) {
     resizeObserver.disconnect();
-    pinned = el;
+    selected = el;
+    selectionDirty = el !== null;
+    placedKey = '';
     if (el) resizeObserver.observe(el);
+    else panel.hide();
     schedule();
   }
 
@@ -148,9 +162,9 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       return;
     }
 
-    if (event.key === 'Escape' && pinned) {
+    if (event.key === 'Escape' && selected) {
       event.preventDefault();
-      pin(null);
+      select(null);
       return;
     }
 
@@ -175,14 +189,23 @@ export function createInspector(canvas: ShadowRoot): Inspector {
 
   const onBlur = () => setAlt(false);
 
-  /** Alt + Click はページ側に渡さない（リンクを踏んでしまう） */
   const onClick = (event: MouseEvent) => {
-    if (!event.altKey) return;
-    const el = traversal ?? pick(event.clientX, event.clientY);
-    if (!el) return;
-    event.preventDefault();
-    event.stopPropagation();
-    pin(el === pinned ? null : el);
+    // Alt + Click は選択。ページ側には渡さない（リンクを踏んでしまう）
+    if (event.altKey) {
+      const el = traversal ?? pick(event.clientX, event.clientY);
+      if (!el) return;
+      event.preventDefault();
+      event.stopPropagation();
+      select(el === selected ? null : el);
+      return;
+    }
+
+    // パネル外クリックで閉じる。capture なのでパネル内のボタンが止める前に来る。
+    // 経路で判定しないと、出自リンクを押しただけで閉じてしまう
+    if (!selected) return;
+    if (event.composedPath().some(isCaliperNode)) return;
+    // 閉じるだけで伝播はさせる。観察器がページのクリックを飲まない（§F4）
+    select(null);
   };
 
   const onScroll = () => {
@@ -194,6 +217,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
     // @media の成否が変われば、キャッシュ済みのマッチ結果は嘘になる
     resetInheritCache();
     target = null;
+    selectionDirty = true;
     schedule();
   };
 
@@ -236,7 +260,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
 
       styleObserver.disconnect();
       resizeObserver.disconnect();
-      pinned = null;
+      selected = null;
       traversal = null;
       target = null;
 
@@ -253,9 +277,8 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       resetInheritCache();
       void loadCssMap();
       box = null;
-      match = null;
-      metrics = [];
       target = null;
+      selectionDirty = true;
       schedule();
     },
 
@@ -266,6 +289,11 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       style.remove();
     },
   };
+}
+
+/** composedPath の要素は ShadowRoot / Window も混ざる */
+function isCaliperNode(node: EventTarget): boolean {
+  return node instanceof Element && node.hasAttribute('data-caliper');
 }
 
 function readBox(computed: CSSStyleDeclaration): BoxModel {
