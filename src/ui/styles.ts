@@ -13,7 +13,7 @@ export const TOKENS = {
   ink3: '#808080',
   rule: '#D9D9D9',
   accent: '#0000FF',
-  surface: '#F2F2F2',
+  surface: '#F2F2F2E6',
 
   /** オーバーレイ。パネルと同じ体系に寄せる（§5） */
   margin: 'rgba(0, 0, 255, 0.10)',
@@ -72,9 +72,9 @@ export const CSS = `
   padding: ${U * 1.5}px ${U * 2.5}px;
   border-radius: ${U}px;
   border: 1px solid var(--cal-rule);
-  background: color-mix(in srgb, var(--cal-surface) 90%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--cal-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   color: var(--cal-ink-2);
   font-family: var(--cal-font);
   font-size: var(--cal-size-s);
@@ -116,10 +116,10 @@ export const CSS = `
   border-radius: ${U * 4}px;
   /* 明色パネルが明色ページの上に出る。90% + blur だけでは輪郭が消える（§5） */
   border: 1px solid var(--cal-rule);
-  background: color-mix(in srgb, var(--cal-surface) 90%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 ${U * 2}px ${U * 8}px -${U * 2}px rgba(0, 0, 0, 0.25);
+  background: var(--cal-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 ${U * 2}px ${U * 8}px -${U * 2}px rgba(0, 0, 0, 0.2);
   color: var(--cal-ink);
   font-family: var(--cal-font);
   font-size: var(--cal-size);
