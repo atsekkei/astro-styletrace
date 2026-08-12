@@ -76,12 +76,11 @@ export function buildStyleIndex(): StyleIndex {
       continue;
     }
 
-    walk(list, { source, conditions: [], layer: null, parent: null }, (rule, ctx) => {
-      const selector = resolveNesting(rule.selectorText, ctx.parent);
+    walk(list, { source, conditions: [], layer: null, parent: null }, (rule, ctx, rawSelector, selector) => {
       rules.push({
         rule,
         selector,
-        rawSelector: rule.selectorText,
+        rawSelector,
         source: ctx.source,
         conditions: ctx.conditions,
         layer: ctx.layer,
@@ -105,22 +104,18 @@ type Ctx = {
 function walk(
   rules: CSSRuleList,
   ctx: Ctx,
-  visit: (rule: CSSStyleRule, ctx: Ctx) => void,
+  visit: (rule: CSSStyleRule, ctx: Ctx, rawSelector: string, selector: string) => void,
   layerOrder: string[],
 ): void {
   for (const rule of Array.from(rules)) {
     if (isStyleRule(rule)) {
-      visit(rule, ctx);
+      const selector = resolveNesting(rule.selectorText, ctx.parent);
+      visit(rule, ctx, rule.selectorText, selector);
 
       // ネイティブ CSS ネスト: CSSStyleRule 自身が子ルールを持つ
       const nested = (rule as CSSStyleRule & { cssRules?: CSSRuleList }).cssRules;
       if (nested && nested.length) {
-        walk(
-          nested,
-          { ...ctx, parent: resolveNesting(rule.selectorText, ctx.parent) },
-          visit,
-          layerOrder,
-        );
+        walk(nested, { ...ctx, parent: selector }, visit, layerOrder);
       }
       continue;
     }
@@ -134,7 +129,23 @@ function walk(
       continue;
     }
 
-    const group = rule as CSSRule & { cssRules?: CSSRuleList };
+    const group = rule as CSSRule & { cssRules?: CSSRuleList; style?: CSSStyleDeclaration };
+
+    /**
+     * ネストした @media の直下に書いた宣言（CSSNestedDeclarations）。
+     *
+     *   .card-grid { gap: 1rem; @media (min-width: 48rem) { gap: 2rem; } }
+     *
+     * この `gap: 2rem` は selectorText を持たないルールとして現れる。拾わないと
+     * 候補から丸ごと落ち、§F2 の `+N` が「他に候補は無い」と嘘をつく。
+     *
+     * セレクタは親そのもの（既に解決済みなので resolveNesting に通さない）。
+     */
+    if (!group.cssRules && group.style && ctx.parent) {
+      visit(rule as CSSStyleRule, ctx, ctx.parent, ctx.parent);
+      continue;
+    }
+
     if (!group.cssRules) continue;
 
     const layerName = layerNameOf(rule);

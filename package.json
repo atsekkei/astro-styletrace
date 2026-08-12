@@ -2,12 +2,16 @@
   "name": "astro-caliper",
   "version": "0.1.0",
   "type": "module",
-  "description": "hover でスタイルの出自と要素間距離を表示する Astro Dev Toolbar App",
+  "description": "hover でスタイルの出自と要素間距離を表示する Astro Integration",
   "license": "MIT",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
     }
   },
   "files": [

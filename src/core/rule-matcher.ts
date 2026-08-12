@@ -13,10 +13,6 @@ export type Declaration = {
   property: string;
   value: string;
   important: boolean;
-  /** 計算値と文字列一致した宣言。§6.4 のハイライト対象 */
-  matchesComputed: boolean;
-  /** 同じプロパティを、より強いルールが既に宣言している */
-  overridden: boolean;
 };
 
 export type MatchedRule = {
@@ -36,31 +32,8 @@ export type MatchResult = {
   unreadable: { label: string; reason: string }[];
 };
 
-/** §F2「既定表示」のプロパティ。M3 時点では暫定値（§12） */
-export const DEFAULT_PROPERTIES = [
-  'display',
-  'position',
-  'width',
-  'height',
-  'margin',
-  'padding',
-  'gap',
-  'flex',
-  'inset',
-  'font-size',
-  'line-height',
-];
-
-const DEFAULT_PREFIXES = ['grid-', 'margin-', 'padding-', 'flex-', 'gap'];
-
-export function isDefaultProperty(property: string): boolean {
-  if (DEFAULT_PROPERTIES.includes(property)) return true;
-  return DEFAULT_PREFIXES.some((p) => property.startsWith(p));
-}
-
 export function matchRules(el: Element): MatchResult {
   const index = getStyleIndex();
-  const computed = getComputedStyle(el);
 
   const matched: IndexedRule[] = [];
   for (const entry of index.rules) {
@@ -77,10 +50,9 @@ export function matchRules(el: Element): MatchResult {
     return b.order - a.order;
   });
 
-  const seen = new Set<string>();
   const rules: MatchedRule[] = [];
 
-  const inline = inlineRule(el, computed, seen);
+  const inline = inlineRule(el);
   if (inline) rules.push(inline);
 
   for (const entry of matched) {
@@ -91,7 +63,7 @@ export function matchRules(el: Element): MatchResult {
       conditions: entry.conditions,
       layer: entry.layer,
       specificity: entry.specificity,
-      declarations: readDeclarations(entry.rule.style, computed, seen),
+      declarations: readDeclarations(entry.rule.style),
       inline: false,
     });
   }
@@ -99,11 +71,7 @@ export function matchRules(el: Element): MatchResult {
   return { rules, unreadable: index.unreadable };
 }
 
-function inlineRule(
-  el: Element,
-  computed: CSSStyleDeclaration,
-  seen: Set<string>,
-): MatchedRule | null {
+function inlineRule(el: Element): MatchedRule | null {
   const style = (el as HTMLElement).style;
   if (!style || style.length === 0) return null;
 
@@ -114,7 +82,7 @@ function inlineRule(
     conditions: [],
     layer: null,
     specificity: [1, 0, 0],
-    declarations: readDeclarations(style, computed, seen),
+    declarations: readDeclarations(style),
     inline: true,
   };
 }
@@ -124,13 +92,9 @@ function inlineRule(
  *
  * style.item() で列挙すると、`margin: 0 0 var(--space-s)` のように var() を含む
  * ショートハンドが「値が空の個別プロパティ」に展開されてしまい、宣言値が消える。
- * §F2 の 1 列目は「書いたとおりの値」でなければ意味がないので、authored 側を採る。
+ * §F2 の declared 行は「書いたとおりの値」でなければ意味がないので、authored 側を採る。
  */
-function readDeclarations(
-  style: CSSStyleDeclaration,
-  computed: CSSStyleDeclaration,
-  seen: Set<string>,
-): Declaration[] {
+function readDeclarations(style: CSSStyleDeclaration): Declaration[] {
   const out: Declaration[] = [];
 
   for (const text of splitTopLevel(style.cssText, ';')) {
@@ -144,16 +108,7 @@ function readDeclarations(
     const important = /!\s*important$/i.test(value);
     if (important) value = value.replace(/!\s*important$/i, '').trim();
 
-    const computedValue = computed.getPropertyValue(property).trim();
-
-    out.push({
-      property,
-      value,
-      important,
-      matchesComputed: computedValue !== '' && normalize(value) === normalize(computedValue),
-      overridden: seen.has(property),
-    });
-    seen.add(property);
+    out.push({ property, value, important });
   }
 
   return out;
@@ -168,10 +123,6 @@ function indexOfTopLevel(input: string, char: string): number {
     else if (c === char && depth === 0) return i;
   }
   return -1;
-}
-
-function normalize(value: string): string {
-  return value.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 function safeMatches(el: Element, selector: string): boolean {

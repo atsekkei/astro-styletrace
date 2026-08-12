@@ -6,12 +6,12 @@
  */
 
 import { loadCssMap } from './css-map.js';
-import { describe, astroComponentId, childOf, parentOf, pick } from './hit-test.js';
+import { describe, childOf, parentOf, pick } from './hit-test.js';
+import { matchCached, resetInheritCache } from './inherit.js';
 import { measure, type MeasureResult } from './measure.js';
 import { buildMetrics, type Metric } from './metrics.js';
-import { matchRules, type MatchResult } from './rule-matcher.js';
+import type { MatchResult } from './rule-matcher.js';
 import { invalidateStyleIndex } from './stylesheet-index.js';
-import { unitContext } from './units.js';
 import { createOverlay, type BoxModel, type Overlay } from '../ui/overlay.js';
 import { createPanel, type Panel } from '../ui/panel.js';
 import { CSS } from '../ui/styles.js';
@@ -49,7 +49,10 @@ export function createInspector(canvas: ShadowRoot): Inspector {
   let placedKey = '';
 
   const resizeObserver = new ResizeObserver(() => schedule());
-  const styleObserver = new MutationObserver(() => invalidateStyleIndex());
+  const styleObserver = new MutationObserver(() => {
+    invalidateStyleIndex();
+    resetInheritCache();
+  });
 
   function schedule() {
     if (!active || frame) return;
@@ -85,8 +88,9 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       const computed = getComputedStyle(target);
       box = readBox(computed);
       transformed = computed.transform !== 'none';
-      match = matchRules(target);
-      metrics = buildMetrics(target, rect, computed, match.rules, unitContext());
+      // 継承の遡り（§F2）で祖先も引くため、マッチ結果はキャッシュ経由で取る
+      match = matchCached(target);
+      metrics = buildMetrics(target, rect, computed, match.rules);
     }
 
     const result: MeasureResult | null = pinnedRect ? measure(pinnedRect, rect) : null;
@@ -96,11 +100,9 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       panel.update({
         target: describe(target),
         rect,
-        match,
         metrics,
         transformed,
         pinned: pinned === target,
-        astroComponentId: astroComponentId(target),
       });
     }
 
@@ -183,8 +185,15 @@ export function createInspector(canvas: ShadowRoot): Inspector {
     pin(el === pinned ? null : el);
   };
 
-  const onScrollOrResize = () => {
+  const onScroll = () => {
+    schedule();
+  };
+
+  const onResize = () => {
     box = null; // resize で padding/margin が変わりうる
+    // @media の成否が変われば、キャッシュ済みのマッチ結果は嘘になる
+    resetInheritCache();
+    target = null;
     schedule();
   };
 
@@ -202,8 +211,8 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       document.addEventListener('click', onClick, true);
       window.addEventListener('blur', onBlur);
       // 内側のスクロールコンテナも拾うため capture が必要（§6.8）
-      document.addEventListener('scroll', onScrollOrResize, { capture: true, passive: true });
-      window.addEventListener('resize', onScrollOrResize, { passive: true });
+      document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+      window.addEventListener('resize', onResize, { passive: true });
 
       styleObserver.observe(document.head, {
         childList: true,
@@ -222,8 +231,8 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       document.removeEventListener('keyup', onKeyUp, true);
       document.removeEventListener('click', onClick, true);
       window.removeEventListener('blur', onBlur);
-      document.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+      document.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
 
       styleObserver.disconnect();
       resizeObserver.disconnect();
@@ -241,6 +250,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
 
     invalidate() {
       invalidateStyleIndex();
+      resetInheritCache();
       void loadCssMap();
       box = null;
       match = null;

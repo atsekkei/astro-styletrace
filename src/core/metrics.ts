@@ -1,40 +1,49 @@
 /**
- * 宣言値 / 計算値 / 実測値の 3 つを 1 行に揃える（§F2）。
+ * declared / computed / measured を 1 ブロックに揃える（§F2）。
  *
- * 3 列並べることが仕様の核心。宣言値と計算値の乖離が P2 を解決し、
- * 計算値と実測値の乖離（margin 相殺、flex の分配、gap と justify-content の競合）が
- * バグの発見点になる。3 つが一致しているときは 1 列に畳む。
+ * 3 行並べることが仕様の核心。declared と computed の乖離が P2 を解決し、
+ * computed と measured の乖離（margin 相殺、flex の分配、gap と justify-content の
+ * 競合）がバグの発見点になる。
+ *
+ * 一致していても畳まない。ブロックの形が固定であることのほうが、数行ぶんの
+ * 高さより価値がある（§F2）。
  */
 
+import { findInherited } from './inherit.js';
+import type { Source } from './resolve-source.js';
 import type { MatchedRule } from './rule-matcher.js';
-import { alternates, fmt, parsePx, type UnitContext } from './units.js';
+import { fmt, parsePx } from './units.js';
+
+/** その longhand を担っている宣言 1 件 */
+export type Candidate = {
+  value: string;
+  /** 宣言に使われていたプロパティ名。ショートハンドで書かれていれば longhand と異なる */
+  property: string;
+  source: Source;
+  selector: string;
+};
 
 export type Metric = {
   property: string;
-  /** 宣言値。マッチしたルールの中で最も強い候補のもの。無ければ null */
-  declared: string | null;
-  /** 宣言に使われていたプロパティ名。ショートハンドで書かれていれば longhand と異なる */
-  declaredAs: string | null;
-  declaredSource: string | null;
-  declaredSelector: string | null;
-  /** 計算値。唯一の真実（§6.4） */
+  /** 詳細度で選んだ最有力候補。断定ではない（§6.4） */
+  declared: Candidate;
+  /** 同じ longhand を担う他の候補。`+N` の中身（§F2） */
+  others: Candidate[];
+  /** 継承で得た場合、宣言を持っていた祖先の記述。`body` */
+  inheritedFrom: string | null;
+  /** 唯一の真実（§6.4） */
   computed: string;
-  /** 宣言値が var() を含むとき、その変数の値。`--space-l: clamp(2rem, 5vw, 4rem)` */
-  variables: string | null;
   /** 実測値。算出できないプロパティでは null */
   measured: number | null;
-  /** 計算値の px を rem / vw に逆算したもの */
-  alternates: string | null;
-  /** 計算値と実測値が食い違っている。バグの発見点 */
+  /** computed と measured が食い違っている。バグの発見点 */
   diverged: boolean;
-  /** 3 つ（または算出できた分）が一致していて 1 列に畳めるか */
-  collapsed: boolean;
 };
 
-/** 3 列表示するプロパティ。§F2 の既定表示のうち、長さとして意味を持つもの */
-const METRIC_PROPERTIES = [
-  'width',
-  'height',
+/**
+ * 表示するプロパティと、その順序（§F2）。
+ * ノギスなので寸法から。width / height は宣言があるときだけ立つので最後。
+ */
+const PROPERTIES = [
   'margin-top',
   'margin-right',
   'margin-bottom',
@@ -47,10 +56,12 @@ const METRIC_PROPERTIES = [
   'column-gap',
   'font-size',
   'line-height',
+  'width',
+  'height',
 ];
 
-/** 0 でも常に出すプロパティ。ここが 0 なのは情報である */
-const ALWAYS = new Set(['width', 'height', 'font-size', 'line-height']);
+/** 宣言が無ければ継承元を遡るプロパティ。継承しないものを遡っても意味がない */
+const INHERITED = new Set(['font-size', 'line-height']);
 
 /** ショートハンド → その宣言が担う longhand */
 const SHORTHANDS: Record<string, string[]> = {
@@ -70,39 +81,45 @@ export function buildMetrics(
   rect: DOMRect,
   computed: CSSStyleDeclaration,
   rules: MatchedRule[],
-  ctx: UnitContext,
 ): Metric[] {
   const measured = measureAll(el, rect, computed);
   const out: Metric[] = [];
 
-  for (const property of METRIC_PROPERTIES) {
+  for (const property of PROPERTIES) {
+    let candidates = findCandidates(rules, property);
+    let inheritedFrom: string | null = null;
+
+    // 宣言があるものだけを出す。無いプロパティは直しに行く先が無い（§F2）
+    if (candidates.length === 0) {
+      if (!INHERITED.has(property)) continue;
+
+      const inherited = findInherited(el, (ancestorRules) => {
+        const found = findCandidates(ancestorRules, property);
+        return found.length > 0 ? found : null;
+      });
+      if (!inherited) continue;
+
+      candidates = inherited.found;
+      inheritedFrom = inherited.from;
+    }
+
     const raw = computed.getPropertyValue(property).trim();
-    const declaration = findDeclaration(rules, property);
-    const measuredValue = measured[property] ?? null;
-
-    if (!ALWAYS.has(property) && !declaration && isZero(raw)) continue;
-
     const computedPx = parsePx(raw);
     // 小数は 1 桁まで（§5）。それ以上は視覚ノイズ
     const computedValue = computedPx === null ? raw : `${fmt(computedPx)}px`;
+
+    const measuredValue = measured[property] ?? null;
     const diverged =
       measuredValue !== null && computedPx !== null && Math.abs(measuredValue - computedPx) > 0.5;
 
-    const declaredMatches =
-      !declaration || normalize(declaration.value) === normalize(computedValue);
-
     out.push({
       property,
-      declared: declaration?.value ?? null,
-      declaredAs: declaration?.property ?? null,
-      declaredSource: declaration?.source ?? null,
-      declaredSelector: declaration?.selector ?? null,
+      declared: candidates[0]!,
+      others: candidates.slice(1),
+      inheritedFrom,
       computed: computedValue,
-      variables: declaration ? resolveVars(declaration.value, computed) : null,
       measured: measuredValue,
-      alternates: alternates(raw, ctx),
       diverged,
-      collapsed: declaredMatches && !diverged,
     });
   }
 
@@ -110,53 +127,28 @@ export function buildMetrics(
 }
 
 /**
- * 宣言値の `var(--space-l)` が実際には何なのかを引く。
- * トークンで組んだ設計では、これが無いと宣言値の行が読めない。
- */
-function resolveVars(value: string, computed: CSSStyleDeclaration): string | null {
-  const names = new Set(Array.from(value.matchAll(/var\(\s*(--[\w-]+)/g), (m) => m[1]!));
-  if (names.size === 0) return null;
-
-  const parts: string[] = [];
-  for (const name of names) {
-    const resolved = computed.getPropertyValue(name).trim();
-    if (resolved) parts.push(`${name}: ${resolved}`);
-  }
-
-  return parts.length > 0 ? parts.join('  /  ') : null;
-}
-
-function isZero(value: string): boolean {
-  return value === '' || value === '0px' || value === 'normal' || value === 'auto';
-}
-
-function normalize(value: string): string {
-  return value.replace(/\s+/g, ' ').trim().toLowerCase();
-}
-
-type Found = { value: string; property: string; source: string; selector: string };
-
-/**
- * その longhand を担っている宣言のうち、最も強い候補を返す。
+ * その longhand を担っている宣言を、強い順に全て返す。
  *
- * §6.4 の通りこれは断定ではない。計算値を隣に並べているので、候補が外れていれば
- * 「宣言値と計算値が食い違う行」として見えるようになっている。
+ * rules は既にカスケード順にソートされているので先頭が最有力候補。
+ * §6.4 の通りこれは断定ではないため、2 件目以降も捨てずに返す
+ * （UI では `+N` として件数だけ出す。§F2）。
  */
-function findDeclaration(rules: MatchedRule[], property: string): Found | null {
+function findCandidates(rules: MatchedRule[], property: string): Candidate[] {
+  const out: Candidate[] = [];
+
   for (const rule of rules) {
     for (const declaration of rule.declarations) {
-      if (declaration.overridden) continue;
-      if (declaration.property === property || covers(declaration.property, property)) {
-        return {
-          value: declaration.value,
-          property: declaration.property,
-          source: rule.source.label,
-          selector: rule.rawSelector,
-        };
-      }
+      if (declaration.property !== property && !covers(declaration.property, property)) continue;
+      out.push({
+        value: declaration.value,
+        property: declaration.property,
+        source: rule.source,
+        selector: rule.rawSelector,
+      });
     }
   }
-  return null;
+
+  return out;
 }
 
 function covers(declared: string, property: string): boolean {

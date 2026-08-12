@@ -1,8 +1,8 @@
 /**
- * エディタジャンプとコピー（§6.9 / M5）。
+ * エディタジャンプ（§6.9）。
  *
- * CSSOM は行番号を持たないので、開けるのはファイル単位まで。
- * 行を特定するために、セレクタをクリップボードへ渡す口も並べて置く。
+ * 行番号は CSSOM が持たないので、dev server 側の行番号マップ（M6）で引く。
+ * 引けなければファイル先頭へ落とす。
  */
 
 import type { Source } from './resolve-source.js';
@@ -40,15 +40,6 @@ export async function openInEditor(file: string): Promise<boolean> {
   try {
     const response = await fetch(`${ENDPOINT}?file=${encodeURIComponent(file)}`);
     return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-export async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
   } catch {
     return false;
   }

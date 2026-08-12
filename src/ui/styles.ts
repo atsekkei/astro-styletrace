@@ -1,40 +1,47 @@
 /**
- * ShadowRoot に流し込むスタイル。
+ * ShadowRoot に流し込むスタイル（§5）。
  *
  * .css ファイルにすると Vite が dev server 経由でページ全体に注入してしまうため
  * （ShadowRoot に閉じ込められない）、文字列として持つ。
  *
- * 見た目のトーン: 半透明ガラス + 発光する細いエッジ。§8 の床は全て満たすこと。
+ * トーン: 明色・無彩色 + 1 色。読む対象ではなく確かめる対象なので、装飾を持たせない。
  */
 
 export const TOKENS = {
-  pin: '#b18cff',
-  hover: '#4fd1ff',
-  measure: '#ff5c8a',
-  margin: 'rgba(255, 176, 92, 0.22)',
-  padding: 'rgba(79, 209, 255, 0.18)',
-  labelBg: 'rgba(10, 12, 22, 0.82)',
-  labelText: '#f2f6ff',
+  ink: '#000000',
+  ink2: '#4D4D4D',
+  ink3: '#808080',
+  rule: '#D9D9D9',
+  accent: '#0000FF',
+  surface: '#F2F2F2',
+
+  /** オーバーレイ。パネルと同じ体系に寄せる（§5） */
+  margin: 'rgba(0, 0, 255, 0.10)',
+  padding: 'rgba(0, 0, 255, 0.20)',
+  overlapFill: 'rgba(0, 0, 255, 0.12)',
+  labelBg: '#0000FF',
+  labelText: '#FFFFFF',
 } as const;
+
+/** 余白は全てこの倍数（§5） */
+const U = 4;
 
 export const CSS = `
 :host {
-  --cal-pin: ${TOKENS.pin};
-  --cal-hover: ${TOKENS.hover};
-  --cal-measure: ${TOKENS.measure};
+  --cal-ink: ${TOKENS.ink};
+  --cal-ink-2: ${TOKENS.ink2};
+  --cal-ink-3: ${TOKENS.ink3};
+  --cal-rule: ${TOKENS.rule};
+  --cal-accent: ${TOKENS.accent};
+  --cal-surface: ${TOKENS.surface};
 
-  --cal-glass: color-mix(in oklab, #070912 90%, transparent);
-  --cal-glass-edge: rgba(255, 255, 255, 0.16);
-  --cal-glass-sheen: rgba(255, 255, 255, 0.5);
-  --cal-text: rgba(244, 247, 255, 0.94);
-  --cal-dim: rgba(244, 247, 255, 0.52);
-  --cal-faint: rgba(244, 247, 255, 0.3);
-
-  --cal-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --cal-sans: system-ui, -apple-system, "Hiragino Sans", sans-serif;
+  --cal-font: Inter, system-ui, -apple-system, "Hiragino Sans", sans-serif;
+  --cal-size: 14px;
+  --cal-size-s: 12px;
+  --cal-u: ${U}px;
 }
 
-.caliper-svg {
+.cal-svg {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -44,418 +51,331 @@ export const CSS = `
   overflow: visible;
 }
 
-.caliper-label-text {
-  font-family: var(--cal-mono);
-  font-size: 11px;
+.cal-label-text {
+  font-family: var(--cal-font);
+  font-size: var(--cal-size-s);
   font-variant-numeric: tabular-nums;
   fill: ${TOKENS.labelText};
   user-select: none;
 }
 
-.caliper-panel {
+/* ---- ON インジケータ（§F4） ---- */
+
+.cal-indicator {
+  position: fixed;
+  left: ${U * 4}px;
+  bottom: ${U * 4}px;
+  z-index: 2147483001;
+  display: none;
+  align-items: center;
+  gap: ${U * 2}px;
+  padding: ${U * 1.5}px ${U * 2.5}px;
+  border-radius: ${U}px;
+  border: 1px solid var(--cal-rule);
+  background: color-mix(in srgb, var(--cal-surface) 90%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--cal-ink-2);
+  font-family: var(--cal-font);
+  font-size: var(--cal-size-s);
+  line-height: 1.2;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cal-indicator[data-visible="true"] {
+  display: flex;
+}
+
+.cal-indicator::before {
+  content: "";
+  width: ${U}px;
+  height: ${U}px;
+  border-radius: 50%;
+  background: var(--cal-accent);
+}
+
+.cal-indicator b {
+  color: var(--cal-ink);
+  font-weight: 600;
+}
+
+/* ---- パネル ---- */
+
+.cal-panel {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 2147483001;
+  z-index: 2147483002;
   box-sizing: border-box;
-  width: 380px;
+  width: 400px;
+  max-width: calc(100vw - ${U * 8}px);
   max-height: min(70vh, 620px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0;
-  border-radius: 16px;
-  border: 1px solid var(--cal-glass-edge);
-  background: var(--cal-glass);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.14) inset,
-    0 0 0 0.5px rgba(0, 0, 0, 0.6),
-    0 24px 60px -12px rgba(0, 0, 0, 0.7);
-  color: var(--cal-text);
-  font-family: var(--cal-sans);
-  font-size: 12px;
-  line-height: 1.5;
+  border-radius: ${U * 4}px;
+  /* 明色パネルが明色ページの上に出る。90% + blur だけでは輪郭が消える（§5） */
+  border: 1px solid var(--cal-rule);
+  background: color-mix(in srgb, var(--cal-surface) 90%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 ${U * 2}px ${U * 8}px -${U * 2}px rgba(0, 0, 0, 0.25);
+  color: var(--cal-ink);
+  font-family: var(--cal-font);
+  font-size: var(--cal-size);
+  line-height: 1.2;
+  /* 等幅をやめた以上これが無いと hover 移動中に桁が踊る（§5 / §8） */
   font-variant-numeric: tabular-nums;
   pointer-events: auto;
   opacity: 0;
   transform: translate3d(0, 0, 0);
-  scale: 0.98;
-  transition: opacity 140ms cubic-bezier(0.22, 1, 0.36, 1), scale 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 120ms ease-out;
 }
 
-.caliper-panel[data-visible="true"] {
+.cal-panel[data-visible="true"] {
   opacity: 1;
-  scale: 1;
-}
-
-/* 追従アニメーションは付けない（§5）。位置は transform で即時反映する */
-.caliper-panel::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--cal-glass-sheen), transparent);
-  opacity: 0.6;
-  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .caliper-panel {
+  .cal-panel {
     transition: opacity 100ms linear;
-    transform: none;
-    scale: 1;
   }
 }
 
-.caliper-head {
+/* ---- 見出し ---- */
+
+.cal-head {
   position: sticky;
   top: 0;
-  padding: 12px 14px 10px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 1;
+  padding: ${U * 4}px;
+  border-bottom: 1px dashed var(--cal-rule);
 }
 
-.caliper-target {
+.cal-target {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  font-family: var(--cal-mono);
-  font-size: 12.5px;
-  letter-spacing: 0.01em;
+  gap: ${U * 2}px;
   user-select: none;
 }
 
-.caliper-target b {
-  font-weight: 600;
-  color: var(--cal-hover);
+.cal-target b {
   overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.caliper-size {
+.cal-size {
   margin-left: auto;
-  color: var(--cal-dim);
-  font-size: 11px;
+  color: var(--cal-ink-2);
+  font-size: var(--cal-size-s);
   white-space: nowrap;
 }
 
-.caliper-badges {
+.cal-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
+  gap: ${U}px;
+  margin-top: ${U * 2}px;
 }
 
-.caliper-badge {
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--cal-dim);
-  font-size: 10px;
-  letter-spacing: 0.02em;
+.cal-badges:empty {
+  display: none;
+}
+
+.cal-badge {
+  padding: ${U / 2}px ${U * 1.5}px;
+  border-radius: ${U}px;
+  border: 1px solid var(--cal-rule);
+  color: var(--cal-ink-3);
+  font-size: var(--cal-size-s);
   user-select: none;
 }
 
-.caliper-badge[data-tone="warn"] {
-  border-color: color-mix(in oklab, var(--cal-measure) 50%, transparent);
-  color: color-mix(in oklab, var(--cal-measure) 80%, white);
+.cal-badge[data-tone="warn"],
+.cal-badge[data-tone="pin"] {
+  border-color: var(--cal-accent);
+  color: var(--cal-accent);
 }
 
-.caliper-badge[data-tone="pin"] {
-  border-color: color-mix(in oklab, var(--cal-pin) 50%, transparent);
-  color: color-mix(in oklab, var(--cal-pin) 80%, white);
+/* ---- 本体 ---- */
+
+.cal-body {
+  display: flex;
+  flex-direction: column;
+  gap: ${U * 4}px;
+  padding: ${U * 4}px;
 }
 
-.caliper-body {
-  padding: 8px 0 10px;
+.cal-empty {
+  margin: 0;
+  color: var(--cal-ink-2);
+  font-size: var(--cal-size-s);
 }
 
-/* 3 列表示（§F2）。宣言値 / 計算値 / 実測値 */
-.caliper-metrics {
-  padding: 2px 0 6px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+/* ---- プロパティ 1 件（§F2） ---- */
+
+.cal-block {
+  display: flex;
+  flex-direction: column;
+  gap: ${U}px;
 }
 
-.caliper-metric {
-  padding: 3px 14px;
-}
-
-.caliper-metric[data-diverged="true"] {
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--cal-measure) 14%, transparent),
-    transparent 70%
-  );
-}
-
-.caliper-metric-head {
+.cal-block-head {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  font-family: var(--cal-mono);
-  font-size: 11px;
+  gap: ${U * 2}px;
 }
 
-.caliper-metric-head .caliper-value {
-  color: var(--cal-text);
+.cal-prop {
+  font-weight: 500;
 }
 
-.caliper-alt {
+.cal-selector {
   margin-left: auto;
-  color: var(--cal-faint);
-  font-size: 10px;
+  overflow: hidden;
+  color: var(--cal-ink-3);
+  font-size: var(--cal-size-s);
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.caliper-cols {
+.cal-inherit {
+  color: var(--cal-ink-3);
+  font-size: var(--cal-size-s);
+}
+
+/* 「表示している 1 件が外れているかもしれない」という信号（§F2） */
+.cal-more {
+  flex: none;
+  padding: 0 ${U}px;
+  border: 1px solid var(--cal-rule);
+  border-radius: ${U}px;
+  background: transparent;
+  color: var(--cal-ink-3);
+  font: inherit;
+  font-size: var(--cal-size-s);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.cal-more:hover,
+.cal-more[aria-expanded="true"] {
+  border-color: var(--cal-accent);
+  color: var(--cal-accent);
+}
+
+/* declared / computed / measured がひとまとまりであることを示す縦罫（§5） */
+.cal-rows {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 0 8px;
-  margin: 1px 0 2px 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.09);
-  padding-left: 8px;
-  font-family: var(--cal-mono);
-  font-size: 11px;
+  gap: ${U}px ${U * 2}px;
+  margin: 0;
+  padding-left: ${U * 2}px;
+  border-left: 1px solid var(--cal-rule);
 }
 
-.caliper-col-label {
-  color: var(--cal-faint);
-  font-size: 10px;
-  white-space: nowrap;
+.cal-label {
+  color: var(--cal-ink-3);
+  font-size: var(--cal-size);
 }
 
-.caliper-col-value {
+.cal-val {
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-.caliper-col-value[data-col="computed"] {
-  color: var(--cal-hover);
+.cal-note {
+  margin-left: ${U * 2}px;
+  color: var(--cal-ink-3);
+  font-size: var(--cal-size-s);
 }
 
-.caliper-col-value[data-col="measured"] {
-  color: var(--cal-text);
+/* computed と measured の乖離がバグの発見点（§F2） */
+.cal-block[data-diverged="true"] .cal-val[data-row="measured"] {
+  color: var(--cal-accent);
+  font-weight: 600;
 }
 
-.caliper-col-note {
-  margin-left: 6px;
-  color: var(--cal-faint);
-  font-size: 10px;
-  white-space: nowrap;
-}
+/* ---- 出自リンク（§F3） ---- */
 
-.caliper-col-value[data-col="variables"] {
-  color: var(--cal-faint);
-  font-size: 10px;
-}
-
-.caliper-metric[data-diverged="true"] .caliper-col-value[data-col="measured"] {
-  color: color-mix(in oklab, var(--cal-measure) 80%, white);
-}
-
-.caliper-origin {
-  margin-left: 10px;
-  color: var(--cal-dim);
-  font-family: var(--cal-mono);
-  font-size: 10px;
-  overflow-wrap: anywhere;
-}
-
-.caliper-group + .caliper-group {
-  margin-top: 2px;
-}
-
-.caliper-file {
-  display: block;
-  width: 100%;
-  padding: 6px 14px 4px;
-  border: 0;
-  background: none;
-  color: var(--cal-hover);
-  font-family: var(--cal-mono);
-  font-size: 11px;
-  text-align: left;
-  overflow-wrap: anywhere;
-  user-select: none;
-}
-
-.caliper-file[data-inline="true"] {
-  color: var(--cal-pin);
-}
-
-.caliper-file[data-open="true"] {
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: 3px;
-  transition: text-decoration-color 120ms ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .caliper-file[data-open="true"]:hover {
-    text-decoration-color: currentColor;
-  }
-}
-
-.caliper-file:focus-visible,
-.caliper-action:focus-visible {
-  outline: 2px solid var(--cal-hover);
-  outline-offset: 2px;
-}
-
-.caliper-file[data-state="ok"] {
-  color: var(--cal-text);
-}
-
-.caliper-file[data-state="fail"] {
-  color: var(--cal-measure);
-}
-
-/* エディタジャンプ / コピー（M5）。普段は沈ませ、hover で浮かせる */
-.caliper-action {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--cal-faint);
-  font-family: var(--cal-sans);
-  font-size: 10px;
-  line-height: 15px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .caliper-action:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: var(--cal-text);
-  }
-}
-
-.caliper-action[data-state="ok"] {
-  border-color: color-mix(in oklab, var(--cal-hover) 55%, transparent);
-  color: color-mix(in oklab, var(--cal-hover) 85%, white);
-}
-
-.caliper-action[data-state="fail"] {
-  border-color: color-mix(in oklab, var(--cal-measure) 55%, transparent);
-  color: color-mix(in oklab, var(--cal-measure) 85%, white);
-}
-
-.caliper-rule {
-  padding: 3px 14px 7px;
-}
-
-.caliper-selector {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-family: var(--cal-mono);
-  font-size: 11.5px;
-  color: var(--cal-text);
-  overflow-wrap: anywhere;
-}
-
-.caliper-spec {
-  margin-left: auto;
-  color: var(--cal-faint);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.caliper-cond {
-  color: var(--cal-dim);
-  font-family: var(--cal-mono);
-  font-size: 10.5px;
-}
-
-.caliper-decls {
-  margin: 3px 0 0;
+.cal-source {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
   padding: 0;
-  list-style: none;
+  border: 0;
+  background: transparent;
+  color: var(--cal-accent);
+  font: inherit;
+  font-size: var(--cal-size);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  cursor: pointer;
 }
 
-.caliper-decl {
-  display: flex;
-  gap: 8px;
-  padding: 1px 0 1px 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.09);
-  font-family: var(--cal-mono);
-  font-size: 11px;
+/* 色だけで示さない（§8）。hover / focus で下線を出す */
+@media (hover: hover) and (pointer: fine) {
+  .cal-source:hover {
+    text-decoration: underline;
+  }
 }
 
-.caliper-decl[data-overridden="true"] {
-  color: var(--cal-faint);
+.cal-source:focus-visible,
+.cal-more:focus-visible {
+  outline: 2px solid var(--cal-accent);
+  outline-offset: 2px;
+  text-decoration: underline;
+}
+
+.cal-source[data-open="false"] {
+  color: var(--cal-ink-3);
+  cursor: default;
+}
+
+.cal-source[data-state="fail"] {
+  color: var(--cal-ink-3);
   text-decoration: line-through;
 }
 
-.caliper-decl[data-computed="true"] {
-  border-left-color: var(--cal-hover);
+/* ---- 他の候補（+N の展開） ---- */
+
+.cal-others {
+  display: flex;
+  flex-direction: column;
+  gap: ${U}px;
+  margin-left: ${U * 2}px;
+  padding-left: ${U * 2}px;
+  border-left: 1px dashed var(--cal-rule);
 }
 
-.caliper-prop {
-  color: var(--cal-dim);
-  white-space: nowrap;
+.cal-other {
+  display: flex;
+  flex-direction: column;
+  gap: ${U / 2}px;
+  font-size: var(--cal-size-s);
 }
 
-.caliper-value {
-  color: var(--cal-text);
+.cal-other-value {
+  color: var(--cal-ink-2);
   overflow-wrap: anywhere;
 }
 
-.caliper-decl[data-computed="true"] .caliper-value {
-  color: var(--cal-hover);
+.cal-other-selector {
+  color: var(--cal-ink-3);
+  overflow-wrap: anywhere;
 }
 
-.caliper-important {
-  color: var(--cal-measure);
-}
+/* ---- ヒント ---- */
 
-.caliper-toggle {
-  display: block;
-  margin: 6px 14px 0;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--cal-dim);
-  font-family: var(--cal-sans);
-  font-size: 10.5px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .caliper-toggle:hover {
-    background: rgba(255, 255, 255, 0.11);
-    color: var(--cal-text);
-  }
-}
-
-.caliper-toggle:focus-visible {
-  outline: 2px solid var(--cal-hover);
-  outline-offset: 2px;
-}
-
-.caliper-empty {
-  padding: 10px 14px;
-  color: var(--cal-dim);
-  font-size: 11.5px;
-}
-
-.caliper-hint {
-  padding: 8px 14px 0;
-  color: var(--cal-faint);
-  font-size: 10.5px;
+.cal-hint {
+  margin: 0;
+  padding: ${U * 3}px ${U * 4}px;
+  border-top: 1px dashed var(--cal-rule);
+  color: var(--cal-ink-3);
+  font-size: var(--cal-size-s);
   user-select: none;
 }
 `;

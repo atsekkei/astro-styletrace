@@ -1,7 +1,7 @@
 /**
  * ハイライト・ガイド線・矢印・ラベルを単一の SVG レイヤーに描く（§6.7）。
  *
- * 要素は毎フレーム作り直さずプールから再利用する。ラベル幅は等幅フォントの
+ * 要素は毎フレーム作り直さずプールから再利用する。ラベル幅は tabular-nums の
  * 前提で文字数から見積もる（getBBox は強制同期レイアウトを起こすため使わない）。
  */
 
@@ -11,9 +11,9 @@ import { TOKENS } from './styles.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 
-/** 等幅 11px の 1 文字あたりの送り幅 */
-const CHAR_W = 6.6;
-const LABEL_H = 17;
+/** Inter 12px・tabular-nums の 1 文字あたりの送り幅（数字基準） */
+const CHAR_W = 7.2;
+const LABEL_H = 18;
 const LABEL_PAD = 6;
 const CAP = 4;
 
@@ -28,10 +28,20 @@ export type OverlayState = {
 
 type Variant = 'pin' | 'hover' | 'measure';
 
+/**
+ * 彩度を 1 色に絞ったので、ピンと hover の区別は色ではなく線種に持たせる（§5）。
+ * ピンは実線、hover は破線。
+ */
 const STROKE: Record<Variant, string> = {
-  pin: TOKENS.pin,
-  hover: TOKENS.hover,
-  measure: TOKENS.measure,
+  pin: TOKENS.ink,
+  hover: TOKENS.accent,
+  measure: TOKENS.accent,
+};
+
+const DASH: Record<Variant, string | null> = {
+  pin: null,
+  hover: '4 3',
+  measure: null,
 };
 
 export type Overlay = {
@@ -42,7 +52,7 @@ export type Overlay = {
 
 export function createOverlay(root: ShadowRoot): Overlay {
   const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('class', 'caliper-svg');
+  svg.setAttribute('class', 'cal-svg');
   svg.setAttribute('data-caliper', 'overlay');
   svg.setAttribute('aria-hidden', 'true');
 
@@ -77,31 +87,21 @@ export function createOverlay(root: ShadowRoot): Overlay {
   }
 
   function highlight(rect: DOMRect, variant: Variant) {
-    // 発光は SVG フィルタではなく二重ストロークで作る（フィルタは毎フレーム重い）
-    const glow = rects.next();
-    glow.setAttribute('x', String(rect.left - 1));
-    glow.setAttribute('y', String(rect.top - 1));
-    glow.setAttribute('width', String(Math.max(0, rect.width + 2)));
-    glow.setAttribute('height', String(Math.max(0, rect.height + 2)));
-    glow.setAttribute('rx', '3');
-    glow.setAttribute('fill', 'none');
-    glow.setAttribute('stroke', STROKE[variant]);
-    glow.setAttribute('stroke-width', '3');
-    glow.setAttribute('opacity', '0.22');
-    glow.removeAttribute('stroke-dasharray');
-
     const node = rects.next();
     node.setAttribute('x', String(rect.left));
     node.setAttribute('y', String(rect.top));
     node.setAttribute('width', String(Math.max(0, rect.width)));
     node.setAttribute('height', String(Math.max(0, rect.height)));
-    node.setAttribute('rx', '2');
+    node.setAttribute('rx', '0');
     node.setAttribute('fill', 'none');
     node.setAttribute('stroke', STROKE[variant]);
-    node.setAttribute('stroke-width', '1');
+    node.setAttribute('stroke-width', '1.5');
     node.setAttribute('opacity', '1');
     node.setAttribute('vector-effect', 'non-scaling-stroke');
-    node.removeAttribute('stroke-dasharray');
+
+    const dash = DASH[variant];
+    if (dash) node.setAttribute('stroke-dasharray', dash);
+    else node.removeAttribute('stroke-dasharray');
   }
 
   /** margin / padding のボックス（外枠と内枠のあいだを塗る） */
@@ -192,11 +192,11 @@ export function createOverlay(root: ShadowRoot): Overlay {
     node.setAttribute('y', String(top));
     node.setAttribute('width', String(Math.max(0, width)));
     node.setAttribute('height', String(Math.max(0, height)));
-    node.setAttribute('fill', 'rgba(255, 92, 138, 0.18)');
+    node.setAttribute('fill', TOKENS.overlapFill);
     node.setAttribute('stroke', STROKE.measure);
     node.setAttribute('stroke-width', '1');
     node.setAttribute('opacity', '1');
-    node.setAttribute('rx', '2');
+    node.setAttribute('rx', '0');
     node.setAttribute('stroke-dasharray', '4 3');
 
     labels.draw(`overlap ${fmt(result.x)} × ${fmt(result.y)}`, left + width / 2, top + height / 2);
@@ -361,7 +361,7 @@ class LabelPool {
     item.rect.setAttribute('y', String(y));
     item.rect.setAttribute('width', String(width));
     item.rect.setAttribute('height', String(LABEL_H));
-    item.rect.setAttribute('rx', '5');
+    item.rect.setAttribute('rx', '4');
 
     item.text.setAttribute('x', String(x + width / 2));
     item.text.setAttribute('y', String(y + LABEL_H / 2));
@@ -374,11 +374,9 @@ class LabelPool {
       const g = document.createElementNS(NS, 'g');
       const rect = document.createElementNS(NS, 'rect');
       rect.setAttribute('fill', TOKENS.labelBg);
-      rect.setAttribute('stroke', 'rgba(255, 255, 255, 0.18)');
-      rect.setAttribute('stroke-width', '1');
 
       const text = document.createElementNS(NS, 'text');
-      text.setAttribute('class', 'caliper-label-text');
+      text.setAttribute('class', 'cal-label-text');
       text.setAttribute('text-anchor', 'middle');
       text.setAttribute('dominant-baseline', 'central');
 

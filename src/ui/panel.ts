@@ -1,26 +1,22 @@
 /**
  * スタイル出自パネル（§F2）。
  *
- * 上段が 3 列表示（宣言値 / 計算値 / 実測値 + rem・vw 逆算）、
- * 下段が「どのファイルの、どのセレクタが、何を宣言しているか」。
+ * プロパティ 1 件が 1 ブロック。ブロックは常に同じ形をしている
+ * （declared / computed / measured を一致していても畳まない）。
  */
 
 import { lineFor } from '../core/css-map.js';
-import { formatMeasured, type Metric } from '../core/metrics.js';
-import { copyText, editorTarget, openInEditor } from '../core/open-in-editor.js';
-import { isDefaultProperty, type MatchResult, type MatchedRule } from '../core/rule-matcher.js';
-import type { Source } from '../core/resolve-source.js';
+import { formatMeasured, type Candidate, type Metric } from '../core/metrics.js';
+import { editorTarget, openInEditor } from '../core/open-in-editor.js';
 import { fmt } from '../core/units.js';
 
 export type PanelContent = {
   target: string;
   rect: DOMRect;
-  match: MatchResult;
   metrics: Metric[];
-  /** transform 適用中（計算値と実測値がずれる。§6.5） */
+  /** transform 適用中（computed と measured がずれる。§6.5） */
   transformed: boolean;
   pinned: boolean;
-  astroComponentId: string | null;
 };
 
 export type Panel = {
@@ -33,25 +29,32 @@ export type Panel = {
 
 export function createPanel(root: ShadowRoot): Panel {
   const el = document.createElement('div');
-  el.className = 'caliper-panel';
+  el.className = 'cal-panel';
   el.setAttribute('data-caliper', 'panel');
   el.setAttribute('data-visible', 'false');
 
   const head = document.createElement('div');
-  head.className = 'caliper-head';
+  head.className = 'cal-head';
   const body = document.createElement('div');
-  body.className = 'caliper-body';
-  el.append(head, body);
+  body.className = 'cal-body';
+
+  const hint = document.createElement('p');
+  hint.className = 'cal-hint';
+  hint.textContent = 'Alt measure · Alt+Click pin · Esc unpin · Alt+↑↓ parent/child';
+
+  el.append(head, body, hint);
   root.appendChild(el);
 
-  let showAll = false;
+  /** `+N` を開いているプロパティ。要素が変われば畳み直す */
+  let expanded = new Set<string>();
   let last: PanelContent | null = null;
 
   function render() {
     if (!last) return;
     renderHead(head, last);
-    renderBody(body, last, showAll, () => {
-      showAll = !showAll;
+    renderBody(body, last, expanded, (property) => {
+      if (expanded.has(property)) expanded.delete(property);
+      else expanded.add(property);
       render();
     });
   }
@@ -59,12 +62,13 @@ export function createPanel(root: ShadowRoot): Panel {
   return {
     update(content) {
       last = content;
+      expanded = new Set();
       render();
     },
 
     /** hover 要素の近傍へ。ビューポート端で反転させる（§5） */
     place(rect) {
-      const width = el.offsetWidth || 380;
+      const width = el.offsetWidth || 400;
       const height = el.offsetHeight || 200;
       const margin = 12;
 
@@ -95,92 +99,33 @@ function renderHead(head: HTMLElement, content: PanelContent) {
   head.textContent = '';
 
   const target = document.createElement('div');
-  target.className = 'caliper-target';
+  target.className = 'cal-target';
 
   const name = document.createElement('b');
   name.textContent = content.target;
 
+  // width / height は宣言があるときだけ行が立つ。実寸はここに常時出す（§F2）
   const size = document.createElement('span');
-  size.className = 'caliper-size';
+  size.className = 'cal-size';
   size.textContent = `${fmt(content.rect.width)} × ${fmt(content.rect.height)}`;
 
   target.append(name, size);
   head.appendChild(target);
 
   const badges = document.createElement('div');
-  badges.className = 'caliper-badges';
+  badges.className = 'cal-badges';
 
+  // 出すのは「この要素の今の状態」だけ。cid と解析不能シートは要素によらず
+  // 同じ内容が出続けるので、常時点いている飾りにしかならない
   if (content.pinned) badges.appendChild(badge('pinned', 'pin'));
   if (content.transformed) badges.appendChild(badge('transformed', 'warn'));
-  if (content.astroComponentId) badges.appendChild(badge(`cid ${content.astroComponentId}`));
-  for (const sheet of content.match.unreadable) {
-    badges.appendChild(badge(`unreadable: ${sheet.label}`, 'warn'));
-  }
-
-  // エージェントへ渡す用（M5）。パネルの内容をそのままテキストで持ち出す
-  const copy = action('copy all', 'Copy the whole panel as text', () =>
-    copyText(summarize(content)),
-  );
-  badges.appendChild(copy);
 
   head.appendChild(badges);
 }
 
-/**
- * 押すと非同期で何かして、結果を短時間だけ見せるボタン。
- *
- * 成否を出さないと「押したのに何も起きない」（エディタが見つからない、
- * クリップボードが拒否された）が黙って消える。
- */
-function action(label: string, title: string, run: () => Promise<boolean>): HTMLButtonElement {
-  const el = document.createElement('button');
-  el.type = 'button';
-  el.className = 'caliper-action';
-  el.title = title;
-  el.textContent = label;
-
-  let timer = 0;
-  el.addEventListener('click', (event) => {
-    event.stopPropagation();
-    void run().then((ok) => {
-      el.dataset.state = ok ? 'ok' : 'fail';
-      clearTimeout(timer);
-      timer = setTimeout(() => delete el.dataset.state, 1000) as unknown as number;
-    });
-  });
-
-  return el;
-}
-
-/** パネルの表示内容をプレーンテキストに落とす（M5「パネル内容のコピー」） */
-function summarize(content: PanelContent): string {
-  const lines: string[] = [
-    `${content.target}  ${fmt(content.rect.width)} × ${fmt(content.rect.height)}`,
-  ];
-
-  for (const metric of content.metrics) {
-    const parts = [`declared ${metric.declared ?? '-'}`, `computed ${metric.computed}`];
-    if (metric.measured !== null) parts.push(`measured ${formatMeasured(metric.measured)}`);
-    lines.push(`  ${metric.property}: ${parts.join(' / ')}`);
-    if (metric.declaredSource) {
-      lines.push(`    ${metric.declaredSource} · ${metric.declaredSelector ?? ''}`);
-    }
-  }
-
-  for (const rule of content.match.rules) {
-    lines.push(`  ${rule.source.label} · ${rule.rawSelector} (${rule.specificity.join(',')})`);
-    for (const declaration of rule.declarations) {
-      const flags = declaration.overridden ? ' [overridden]' : '';
-      lines.push(`    ${declaration.property}: ${declaration.value}${flags}`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
 function badge(text: string, tone?: 'warn' | 'pin'): HTMLElement {
   const el = document.createElement('span');
-  el.className = 'caliper-badge';
+  el.className = 'cal-badge';
   if (tone) el.dataset.tone = tone;
   el.textContent = text;
   return el;
@@ -189,166 +134,123 @@ function badge(text: string, tone?: 'warn' | 'pin'): HTMLElement {
 function renderBody(
   body: HTMLElement,
   content: PanelContent,
-  showAll: boolean,
-  onToggle: () => void,
+  expanded: Set<string>,
+  onToggle: (property: string) => void,
 ) {
   body.textContent = '';
 
-  if (content.metrics.length > 0) body.appendChild(renderMetrics(content.metrics));
-
-  const rules = content.match.rules;
-  if (rules.length === 0) {
+  if (content.metrics.length === 0) {
     const empty = document.createElement('p');
-    empty.className = 'caliper-empty';
-    empty.textContent = 'No matching rules.';
+    empty.className = 'cal-empty';
+    empty.textContent = 'No declarations for this element.';
     body.appendChild(empty);
+    return;
   }
 
-  for (const group of groupBySource(rules)) {
-    const section = document.createElement('section');
-    section.className = 'caliper-group';
-
-    section.appendChild(renderFile(group));
-
-    for (const rule of group.rules) {
-      const declarations = showAll
-        ? rule.declarations
-        : rule.declarations.filter((d) => isDefaultProperty(d.property));
-      if (declarations.length === 0) continue;
-
-      section.appendChild(renderRule(rule, declarations));
-    }
-
-    if (section.childElementCount > 1) body.appendChild(section);
+  for (const metric of content.metrics) {
+    body.appendChild(renderBlock(metric, expanded.has(metric.property), onToggle));
   }
-
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'caliper-toggle';
-  toggle.textContent = showAll ? 'Layout properties only' : 'All declarations of matched rules';
-  toggle.addEventListener('click', onToggle);
-  body.appendChild(toggle);
-
-  const hint = document.createElement('p');
-  hint.className = 'caliper-hint';
-  hint.textContent = 'Alt measure · Alt+Click pin · Esc unpin · Alt+↑↓ parent/child';
-  body.appendChild(hint);
 }
 
-/** 出自ファイルの見出し。ディスク上にあるファイルならエディタで開ける（§6.9） */
-function renderFile(group: Group): HTMLElement {
-  const inline = group.rules[0]?.inline ?? false;
-  const target = inline ? null : editorTarget(group.source);
+function renderBlock(
+  metric: Metric,
+  open: boolean,
+  onToggle: (property: string) => void,
+): HTMLElement {
+  const block = document.createElement('section');
+  block.className = 'cal-block';
+  block.dataset.diverged = String(metric.diverged);
 
-  if (!target) {
-    const el = document.createElement('div');
-    el.className = 'caliper-file';
-    el.dataset.inline = String(inline);
-    el.textContent = group.label;
-    return el;
+  block.appendChild(renderBlockHead(metric, open, onToggle));
+  block.appendChild(renderRows(metric));
+  block.appendChild(renderSource(metric.declared));
+
+  if (open && metric.others.length > 0) block.appendChild(renderOthers(metric.others));
+
+  return block;
+}
+
+function renderBlockHead(
+  metric: Metric,
+  open: boolean,
+  onToggle: (property: string) => void,
+): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'cal-block-head';
+
+  const prop = document.createElement('span');
+  prop.className = 'cal-prop';
+  prop.textContent = metric.property;
+  el.appendChild(prop);
+
+  if (metric.inheritedFrom) {
+    const inherited = document.createElement('span');
+    inherited.className = 'cal-inherit';
+    inherited.textContent = `← ${metric.inheritedFrom}`;
+    el.appendChild(inherited);
   }
 
-  const el = document.createElement('button');
-  el.type = 'button';
-  el.className = 'caliper-file';
-  el.dataset.inline = 'false';
-  el.dataset.open = 'true';
-  el.title = `Open ${target} in your editor`;
-  el.textContent = group.label;
-  el.addEventListener('click', () => {
-    void openInEditor(target).then((ok) => {
-      el.dataset.state = ok ? 'ok' : 'fail';
-      setTimeout(() => delete el.dataset.state, 1000);
+  const selector = document.createElement('span');
+  selector.className = 'cal-selector';
+  selector.textContent = metric.declared.selector;
+  selector.title = metric.declared.selector;
+  el.appendChild(selector);
+
+  // 件数が付いていない行は候補が 1 つしかないので、そのまま信じてよい（§F2）
+  if (metric.others.length > 0) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'cal-more';
+    more.textContent = `+${metric.others.length}`;
+    more.setAttribute('aria-expanded', String(open));
+    more.title = `${metric.others.length} more declaration(s) for ${metric.property}`;
+    more.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onToggle(metric.property);
     });
-  });
+    el.appendChild(more);
+  }
+
   return el;
 }
 
-/** 3 列表示（§F2）。3 つが一致している行は 1 列に畳む */
-function renderMetrics(metrics: Metric[]): HTMLElement {
-  const section = document.createElement('section');
-  section.className = 'caliper-metrics';
+/** 常に同じ形（§F2）。measured が取れないときも declared / computed の位置は動かさない */
+function renderRows(metric: Metric): HTMLElement {
+  const rows = document.createElement('dl');
+  rows.className = 'cal-rows';
 
-  for (const metric of metrics) {
-    const row = document.createElement('div');
-    row.className = 'caliper-metric';
-    row.dataset.diverged = String(metric.diverged);
+  // ショートハンドで書かれていた場合、その名前は値の側に添える
+  // （ラベル列を広げると値の列が潰れる）
+  const via =
+    metric.declared.property === metric.property ? null : `via ${metric.declared.property}`;
 
-    const headline = document.createElement('div');
-    headline.className = 'caliper-metric-head';
-
-    const prop = document.createElement('span');
-    prop.className = 'caliper-prop';
-    prop.textContent = metric.property;
-    headline.appendChild(prop);
-
-    if (metric.collapsed) {
-      const value = document.createElement('span');
-      value.className = 'caliper-value';
-      value.textContent = metric.computed;
-      headline.appendChild(value);
-    }
-
-    if (metric.alternates) {
-      const alt = document.createElement('span');
-      alt.className = 'caliper-alt';
-      alt.textContent = metric.alternates;
-      headline.appendChild(alt);
-    }
-
-    row.appendChild(headline);
-
-    if (!metric.collapsed) {
-      const columns = document.createElement('dl');
-      columns.className = 'caliper-cols';
-
-      if (metric.declared !== null) {
-        // ショートハンドで書かれていた場合、その名前は値の側に添える
-        // （ラベル列を広げると値の列が潰れる）
-        const via = metric.declaredAs === metric.property ? null : `via ${metric.declaredAs}`;
-        columns.append(...column('declared', metric.declared, 'declared', via));
-        if (metric.variables) columns.append(...column('', metric.variables, 'variables'));
-      }
-      columns.append(...column('computed', metric.computed, 'computed'));
-      if (metric.measured !== null) {
-        columns.append(...column('measured', formatMeasured(metric.measured), 'measured'));
-      }
-
-      row.appendChild(columns);
-    }
-
-    if (metric.declaredSource) {
-      const origin = document.createElement('div');
-      origin.className = 'caliper-origin';
-      origin.textContent = `${metric.declaredSource} · ${metric.declaredSelector ?? ''}`;
-      origin.title = 'Strongest candidate by specificity — not asserted as the winner (§6.4)';
-      row.appendChild(origin);
-    }
-
-    section.appendChild(row);
+  rows.append(...row('declared', metric.declared.value, 'declared', via));
+  rows.append(...row('computed', metric.computed, 'computed'));
+  if (metric.measured !== null) {
+    rows.append(...row('measured', formatMeasured(metric.measured), 'measured'));
   }
 
-  return section;
+  return rows;
 }
 
-function column(
+function row(
   label: string,
   value: string,
   kind: string,
   note?: string | null,
 ): [HTMLElement, HTMLElement] {
   const dt = document.createElement('dt');
-  dt.className = 'caliper-col-label';
+  dt.className = 'cal-label';
   dt.textContent = label;
 
   const dd = document.createElement('dd');
-  dd.className = 'caliper-col-value';
-  dd.dataset.col = kind;
+  dd.className = 'cal-val';
+  dd.dataset.row = kind;
   dd.textContent = value;
 
   if (note) {
     const suffix = document.createElement('span');
-    suffix.className = 'caliper-col-note';
+    suffix.className = 'cal-note';
     suffix.textContent = note;
     dd.appendChild(suffix);
   }
@@ -356,89 +258,63 @@ function column(
   return [dt, dd];
 }
 
-function renderRule(rule: MatchedRule, declarations: MatchedRule['declarations']): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'caliper-rule';
+/**
+ * 出自リンク。ブロックごとに持つ（§F3）。
+ * リセット CSS + グローバル + scoped style が混ざるので、パネル単位ではまとめられない。
+ */
+function renderSource(candidate: Candidate): HTMLElement {
+  const file = editorTarget(candidate.source);
 
-  const selector = document.createElement('div');
-  selector.className = 'caliper-selector';
-
-  const text = document.createElement('code');
-  text.textContent = rule.rawSelector;
-  selector.appendChild(text);
-
-  // 行が引けるなら直接そこへ飛ぶ（M6）。引けなければセレクタを持ち出して検索（M5）
-  const file = rule.inline ? null : editorTarget(rule.source);
-  const line = file ? lineFor(rule.source, rule.rawSelector) : null;
-
-  if (file && line !== null) {
-    selector.appendChild(
-      action('open', `Open ${file}:${line}`, () => openInEditor(`${file}:${line}`)),
-    );
-  }
-  selector.appendChild(action('copy', 'Copy this selector', () => copyText(rule.rawSelector)));
-
-  const spec = document.createElement('span');
-  spec.className = 'caliper-spec';
-  spec.textContent = rule.layer
-    ? `@layer ${rule.layer} · ${rule.specificity.join(',')}`
-    : rule.specificity.join(',');
-  selector.appendChild(spec);
-  wrap.appendChild(selector);
-
-  for (const condition of rule.conditions) {
-    const cond = document.createElement('div');
-    cond.className = 'caliper-cond';
-    cond.textContent = `@${condition.kind} ${condition.text}`;
-    wrap.appendChild(cond);
+  if (!file) {
+    const el = document.createElement('span');
+    el.className = 'cal-source';
+    el.dataset.open = 'false';
+    el.textContent = candidate.source.label;
+    return el;
   }
 
-  const list = document.createElement('ul');
-  list.className = 'caliper-decls';
+  // 行が引けるならそこへ、引けなければファイル先頭へ（§6.9）
+  const line = lineFor(candidate.source, candidate.selector);
+  const target = line === null ? file : `${file}:${line}`;
 
-  for (const declaration of declarations) {
-    const item = document.createElement('li');
-    item.className = 'caliper-decl';
-    item.dataset.overridden = String(declaration.overridden);
-    item.dataset.computed = String(declaration.matchesComputed);
-    if (declaration.matchesComputed) item.title = 'matches the computed value';
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'cal-source';
+  el.dataset.open = 'true';
+  el.title = `Open ${target} in your editor`;
+  el.textContent = `${candidate.source.label} ↗`;
+  el.addEventListener('click', (event) => {
+    event.stopPropagation();
+    void openInEditor(target).then((ok) => {
+      if (ok) return;
+      el.dataset.state = 'fail';
+      setTimeout(() => delete el.dataset.state, 1000);
+    });
+  });
 
-    const prop = document.createElement('span');
-    prop.className = 'caliper-prop';
-    prop.textContent = `${declaration.property}:`;
+  return el;
+}
+
+function renderOthers(others: Candidate[]): HTMLElement {
+  const list = document.createElement('div');
+  list.className = 'cal-others';
+
+  for (const candidate of others) {
+    const item = document.createElement('div');
+    item.className = 'cal-other';
 
     const value = document.createElement('span');
-    value.className = 'caliper-value';
-    value.textContent = declaration.value;
+    value.className = 'cal-other-value';
+    value.textContent = `${candidate.property}: ${candidate.value}`;
 
-    item.append(prop, value);
+    const selector = document.createElement('span');
+    selector.className = 'cal-other-selector';
+    selector.textContent = candidate.selector;
 
-    if (declaration.important) {
-      const important = document.createElement('span');
-      important.className = 'caliper-important';
-      important.textContent = '!';
-      item.appendChild(important);
-    }
-
+    item.append(value, selector);
+    item.appendChild(renderSource(candidate));
     list.appendChild(item);
   }
 
-  wrap.appendChild(list);
-  return wrap;
-}
-
-type Group = { label: string; source: Source; rules: MatchedRule[] };
-
-/** 出自ファイルごとにグルーピング（§F2）。並び順は詳細度順のまま保つ */
-function groupBySource(rules: MatchedRule[]): Group[] {
-  const groups: Group[] = [];
-
-  for (const rule of rules) {
-    const label = rule.source.label;
-    const last = groups[groups.length - 1];
-    if (last && last.label === label) last.rules.push(rule);
-    else groups.push({ label, source: rule.source, rules: [rule] });
-  }
-
-  return groups;
+  return list;
 }

@@ -57,14 +57,3 @@ export function describe(el: Element): string {
     .join('');
   return `${tag}${id}${classes}`;
 }
-
-/**
- * Astro の scoped style は要素に data-astro-cid-XXXXXXXX を付ける。
- * ルール解決が空振りしたときの補助経路（§6.2）。
- */
-export function astroComponentId(el: Element): string | null {
-  for (const attr of Array.from(el.attributes)) {
-    if (attr.name.startsWith('data-astro-cid-')) return attr.name.slice('data-astro-cid-'.length);
-  }
-  return null;
-}
