@@ -16,7 +16,7 @@ npm install -D astro-caliper
 # yarn add -D astro-caliper
 ```
 
-Requires Astro 5 and Vite 6 or 7.
+Supports Astro 5, 6, and 7 (Vite 6, 7, and 8 respectively).
 
 ```js
 // astro.config.mjs
@@ -144,6 +144,7 @@ pnpm --filter playground dev
 | `pnpm watch` | Compile in watch mode |
 | `pnpm typecheck` | Types only |
 | `pnpm check` | `typecheck` + the Astro-dependency boundary check |
+| `pnpm check:compat` | Pack and smoke-test the integration against Astro 5, 6, and 7 |
 
 The design document is [spec.md](./spec.md) (Japanese).
 

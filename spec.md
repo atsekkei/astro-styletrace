@@ -43,7 +43,7 @@ Astro Integration がクライアントスクリプトを注入し、ショー�
 
 ## 3. 前提環境
 
-- Astro 4 以降（`injectScript` / `astro:server:setup` が安定している版）
+- Astro 5 / 6 / 7（それぞれが同梱する Vite 6 / 7 / 8）
 - Vite dev server（Astro に内蔵）
 - Astro Dev Toolbar は**無効化されていてよい**（`devToolbar: { enabled: false }`）。このツールは toolbar に依存しない
 - 素の CSS / ネイティブ CSS ネスト / `.astro` の `<style>`
@@ -622,7 +622,7 @@ SpacingJS（MIT, 約 300 行）は距離計測部分の**依存としてでは�
 
 ```
 astro-caliper/
-├─ package.json            … peerDependencies: astro ^5, vite ^6（§10 参照）
+├─ package.json            … peerDependencies: astro ^5–7, vite ^6–8（§10 参照）
 ├─ src/
 │  ├─ index.ts              … Astro Integration（config:setup / server:setup）  ★Astro依存
 │  ├─ app.ts                … boot。host + ShadowRoot を作り、ショートカットを待ち受ける  ★Astro依存
