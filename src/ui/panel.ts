@@ -1,4 +1,5 @@
 import { lineFor } from '../core/css-map.js';
+import { formatAgentContext } from '../core/agent-context.js';
 import { formatMeasured, type Candidate, type Metric } from '../core/metrics.js';
 import { editorTarget, openInEditor } from '../core/open-in-editor.js';
 import { fmt } from '../core/units.js';
@@ -30,15 +31,25 @@ export function createPanel(root: ShadowRoot): Panel {
   const body = document.createElement('div');
   body.className = 'cal-body';
 
+  const actions = document.createElement('div');
+  actions.className = 'cal-actions';
+
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'cal-copy';
+  copy.textContent = 'Copy for agent';
+  actions.appendChild(copy);
+
   const hint = document.createElement('p');
   hint.className = 'cal-hint';
   hint.textContent = 'Alt+Click select · Esc / outside click close · Alt+↑↓ parent/child';
 
-  el.append(head, body, hint);
+  el.append(head, body, actions, hint);
   root.appendChild(el);
 
   let expanded = new Set<string>();
   let last: PanelContent | null = null;
+  let copyReset = 0;
 
   let x = 0;
   let y = 0;
@@ -77,6 +88,30 @@ export function createPanel(root: ShadowRoot): Panel {
     head.addEventListener('pointermove', onMove);
     head.addEventListener('pointerup', onEnd);
     head.addEventListener('pointercancel', onEnd);
+  });
+
+  copy.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (!last) return;
+
+    const text = formatAgentContext({
+      ...last,
+      viewport: { width: innerWidth, height: innerHeight },
+    });
+
+    copy.disabled = true;
+    void writeClipboard(text, root).then((ok) => {
+      copy.textContent = ok ? 'Copied' : 'Copy failed';
+      copy.dataset.state = ok ? 'success' : 'fail';
+
+      if (copyReset) clearTimeout(copyReset);
+      copyReset = window.setTimeout(() => {
+        copy.textContent = 'Copy for agent';
+        copy.disabled = false;
+        delete copy.dataset.state;
+        copyReset = 0;
+      }, 1200);
+    });
   });
 
   function render() {
@@ -127,9 +162,37 @@ export function createPanel(root: ShadowRoot): Panel {
       el.setAttribute('data-dim', String(on));
     },
     destroy() {
+      if (copyReset) clearTimeout(copyReset);
       el.remove();
     },
   };
+}
+
+async function writeClipboard(text: string, root: ShadowRoot): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return legacyCopy(text, root);
+  }
+}
+
+function legacyCopy(text: string, root: ShadowRoot): boolean {
+  const input = document.createElement('textarea');
+  input.value = text;
+  input.setAttribute('aria-hidden', 'true');
+  input.style.cssText =
+    'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+  root.appendChild(input);
+  input.select();
+
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    input.remove();
+  }
 }
 
 function renderHead(head: HTMLElement, content: PanelContent) {

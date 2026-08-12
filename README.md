@@ -4,6 +4,8 @@ An Astro integration that shows **where a style came from** and **how far apart 
 
 Hold `Alt` to measure. `Alt + Click` an element to open a panel that tells you, for every declared property, what the CSS says, what the browser computed, and what the layout actually produced — plus the file it came from, one click away from your editor.
 
+Use **Copy for agent** in the panel to copy that diagnosis — including selectors and source lines — as compact text you can paste into your coding agent.
+
 Dev only. The integration bails out unless `command === 'dev'`, so nothing reaches a production build.
 
 ## Install
@@ -78,6 +80,8 @@ src/pages/index.astro ↗
 
 Click the source file name to open it in your editor, at the exact line when one can be resolved.
 
+Click **Copy for agent** to copy the selected element, viewport, declared candidates, computed and measured values, selectors, competing-candidate counts, and `file:line` sources. The copied text labels declarations as candidates because caliper does not claim to reproduce the complete cascade. Copying is explicit and local; nothing is sent to an external service.
+
 ### What measured means
 
 | Property | Measured value |
@@ -98,6 +102,7 @@ For example, a paragraph with `margin-block: 1rem` inside a flex container with 
 - Cross-origin sheets are kept in the index as unreadable rather than silently dropped
 - `+N` for competing declarations, expandable in place
 - Editor jump with a PostCSS-built `selector → line` map
+- Agent-ready diagnostic copy with source lines and measured layout values
 
 ## Non-goals
 

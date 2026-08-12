@@ -94,12 +94,13 @@ export const CSS = `
   top: 0;
   left: 0;
   z-index: 2147483002;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   width: 400px;
   max-width: calc(100vw - ${U * 8}px);
   max-height: min(70vh, 620px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden;
   border-radius: ${U * 4}px;
   border: 1px solid var(--cal-rule);
   background: var(--cal-surface);
@@ -198,8 +199,11 @@ export const CSS = `
 .cal-body {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   gap: ${U * 4}px;
   padding: ${U * 4}px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .cal-empty {
@@ -327,6 +331,50 @@ export const CSS = `
   text-decoration: line-through;
 }
 
+.cal-actions {
+  flex: none;
+  display: flex;
+  padding: ${U * 3}px ${U * 4}px;
+  border-top: 1px dashed var(--cal-rule);
+  background: var(--cal-surface);
+}
+
+.cal-copy {
+  width: 112px;
+  padding: ${U * 1.5}px ${U * 2}px;
+  border: 1px solid var(--cal-rule);
+  border-radius: ${U}px;
+  background: transparent;
+  color: var(--cal-ink-2);
+  font: inherit;
+  font-size: var(--cal-size-s);
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.cal-copy:hover {
+  border-color: var(--cal-accent);
+  color: var(--cal-accent);
+}
+
+.cal-copy:focus-visible {
+  outline: 2px solid var(--cal-accent);
+  outline-offset: 2px;
+}
+
+.cal-copy:disabled {
+  cursor: default;
+}
+
+.cal-copy[data-state="success"] {
+  border-color: var(--cal-accent);
+  color: var(--cal-accent);
+}
+
+.cal-copy[data-state="fail"] {
+  color: var(--cal-ink-3);
+}
+
 .cal-others {
   display: flex;
   flex-direction: column;
@@ -354,9 +402,11 @@ export const CSS = `
 }
 
 .cal-hint {
+  flex: none;
   margin: 0;
   padding: ${U * 3}px ${U * 4}px;
   border-top: 1px dashed var(--cal-rule);
+  background: var(--cal-surface);
   color: var(--cal-ink-3);
   font-size: var(--cal-size-s);
   user-select: none;
