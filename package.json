@@ -44,7 +44,8 @@
     "watch": "tsc -w -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check:boundary": "sh scripts/check-boundary.sh",
-    "check": "pnpm run typecheck && pnpm run check:boundary",
+    "check": "pnpm run typecheck && pnpm run check:boundary && pnpm run check:core",
+    "check:core": "pnpm build && node --test tests/*.test.mjs",
     "check:compat": "pnpm build && node scripts/check-astro-compat.mjs"
   },
   "peerDependencies": {

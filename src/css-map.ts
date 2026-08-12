@@ -25,7 +25,7 @@ export function createCssMapStore(): CssMapStore {
           const lines = collect(code, id);
           if (lines) {
             const file = fileOf(id);
-            map[file] = { ...map[file], ...lines };
+            map[file] = lines;
           }
           return null;
         },
@@ -38,23 +38,32 @@ export function createCssMapStore(): CssMapStore {
   };
 }
 
-function collect(code: string, id: string): Record<string, number> | null {
+function collect(code: string, id: string): Record<string, number[]> | null {
   if (!STYLE_ID.test(id)) return null;
   if (id.includes('/node_modules/')) return null;
 
   const file = fileOf(id);
 
-  const block = PLAIN_STYLE.has(extname(file)) ? { code, offset: 0 } : styleBlock(file, id);
-  if (!block) return null;
+  const blocks = PLAIN_STYLE.has(extname(file)) ? [{ code, offset: 0 }] : styleBlocks(file);
+  if (!blocks?.length) return null;
 
+  const out: Record<string, number[]> = {};
+
+  for (const block of blocks) collectBlock(block, file, out);
+  return out;
+}
+
+function collectBlock(
+  block: { code: string; offset: number },
+  file: string,
+  out: Record<string, number[]>,
+): void {
   let root: postcss.Root;
   try {
     root = postcss.parse(block.code, { from: file });
   } catch {
-    return null;
+    return;
   }
-
-  const out: Record<string, number> = {};
 
   root.walkRules((rule) => {
     const line = rule.source?.start?.line;
@@ -62,26 +71,28 @@ function collect(code: string, id: string): Record<string, number> | null {
 
     const at = line + block.offset;
     const key = normalizeSelector(rule.selector);
-    if (key && out[key] === undefined) out[key] = at;
+    if (key) pushLine(out, key, at);
 
     if (rule.selectors.length > 1) {
       for (const part of rule.selectors) {
         const single = normalizeSelector(part);
-        if (single && out[single] === undefined) out[single] = at;
+        if (single) pushLine(out, single, at);
       }
     }
   });
 
-  return out;
+}
+
+function pushLine(out: Record<string, number[]>, selector: string, line: number): void {
+  const lines = (out[selector] ??= []);
+  if (!lines.includes(line)) lines.push(line);
 }
 
 function fileOf(id: string): string {
   return id.split('?')[0] ?? id;
 }
 
-function styleBlock(file: string, id: string): { code: string; offset: number } | null {
-  const index = Number(/[?&]index=(\d+)/.exec(id)?.[1] ?? 0);
-
+function styleBlocks(file: string): { code: string; offset: number }[] | null {
   let source: string;
   try {
     source = readFileSync(file, 'utf8');
@@ -89,20 +100,20 @@ function styleBlock(file: string, id: string): { code: string; offset: number } 
     return null;
   }
 
-  let at = -1;
-  for (let i = 0; i <= index; i++) {
-    at = source.indexOf('<style', at + 1);
-    if (at < 0) return null;
+  const blocks: { code: string; offset: number }[] = [];
+  let cursor = 0;
+  while (cursor < source.length) {
+    const at = source.indexOf('<style', cursor);
+    if (at < 0) break;
+    const start = source.indexOf('>', at);
+    if (start < 0) break;
+    const end = source.indexOf('</style', start);
+    if (end < 0) break;
+    blocks.push({
+      code: source.slice(start + 1, end),
+      offset: source.slice(0, start + 1).split('\n').length - 1,
+    });
+    cursor = end + 7;
   }
-
-  const start = source.indexOf('>', at);
-  if (start < 0) return null;
-
-  const end = source.indexOf('</style', start);
-  if (end < 0) return null;
-
-  return {
-    code: source.slice(start + 1, end),
-    offset: source.slice(0, start + 1).split('\n').length - 1,
-  };
+  return blocks;
 }

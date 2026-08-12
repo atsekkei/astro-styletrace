@@ -24,13 +24,13 @@ export function formatAgentContext(context: AgentContext): string {
   for (const metric of context.metrics) {
     const declared = metric.declared;
     const via = declared.property === metric.property ? '' : ` via ${declared.property}`;
-    const line = lineFor(declared.source, declared.selector);
+    const line = lineFor(declared.source, declared.selector, declared.occurrence);
     const source = line === null ? declared.source.label : `${declared.source.label}:${line}`;
 
     lines.push(
       '',
       `${metric.property}:`,
-      `- declared candidate: ${declared.value}${via}`,
+      `- declared candidate: ${declared.value}${declared.important ? ' !important' : ''}${via}`,
       `- computed: ${metric.computed}`,
     );
 

@@ -1,5 +1,6 @@
 import { resolveSource, type Source } from './resolve-source.js';
 import { specificity, splitTopLevel, type Specificity } from './specificity.js';
+import { normalizeSelector } from './css-map.js';
 
 export type Condition = {
   kind: 'media' | 'supports' | 'container' | 'scope' | 'other';
@@ -15,6 +16,7 @@ export type IndexedRule = {
   layer: string | null;
   specificity: Specificity;
   order: number;
+  occurrence: number;
 };
 
 export type UnreadableSheet = {
@@ -44,6 +46,7 @@ export function buildStyleIndex(): StyleIndex {
   const unreadable: UnreadableSheet[] = [];
   const layerOrder: string[] = [];
   let order = 0;
+  const occurrences = new Map<string, number>();
 
   for (const sheet of Array.from(document.styleSheets)) {
     const source = resolveSource(sheet as CSSStyleSheet);
@@ -63,6 +66,9 @@ export function buildStyleIndex(): StyleIndex {
     }
 
     walk(list, { source, conditions: [], layer: null, parent: null }, (rule, ctx, rawSelector, selector) => {
+      const key = `${ctx.source.raw}\0${normalizeSelector(rawSelector)}`;
+      const occurrence = occurrences.get(key) ?? 0;
+      occurrences.set(key, occurrence + 1);
       rules.push({
         rule,
         selector,
@@ -72,6 +78,7 @@ export function buildStyleIndex(): StyleIndex {
         layer: ctx.layer,
         specificity: specificity(selector),
         order: order++,
+        occurrence,
       });
     }, layerOrder);
   }
@@ -95,7 +102,11 @@ function walk(
   for (const rule of Array.from(rules)) {
     if (isStyleRule(rule)) {
       const selector = resolveNesting(rule.selectorText, ctx.parent);
-      visit(rule, ctx, rule.selectorText, selector);
+      const rawParts = splitTopLevel(rule.selectorText, ',');
+      const selectorParts = splitTopLevel(selector, ',');
+      for (const [index, part] of selectorParts.entries()) {
+        visit(rule, ctx, rawParts[index] ?? rule.selectorText, part);
+      }
 
       const nested = (rule as CSSStyleRule & { cssRules?: CSSRuleList }).cssRules;
       if (nested && nested.length) {

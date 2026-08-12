@@ -13,10 +13,12 @@ const matrix = [
 ];
 
 const temp = await mkdtemp(join(tmpdir(), 'astro-caliper-compat-'));
+const npmEnv = { ...process.env, npm_config_cache: join(temp, 'npm-cache') };
 
 try {
   const { stdout } = await exec('npm', ['pack', '--json', '--pack-destination', temp], {
     cwd: root,
+    env: npmEnv,
   });
   const packed = JSON.parse(stdout);
   const tarball = join(temp, packed[0].filename);
@@ -58,6 +60,7 @@ async function checkVersion(target, tarball) {
 
   await exec('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund'], {
     cwd: fixture,
+    env: npmEnv,
   });
 
   const astro = join(fixture, 'node_modules', '.bin', 'astro');

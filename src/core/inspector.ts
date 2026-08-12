@@ -2,7 +2,7 @@ import { loadCssMap } from './css-map.js';
 import { describe, childOf, parentOf, pick } from './hit-test.js';
 import { matchCached, resetInheritCache } from './inherit.js';
 import { measure, type MeasureResult } from './measure.js';
-import { buildMetrics } from './metrics.js';
+import { buildMetrics, hasTransformedChain } from './metrics.js';
 import { invalidateStyleIndex } from './stylesheet-index.js';
 import { createOverlay, type BoxModel, type Overlay } from '../ui/overlay.js';
 import { createPanel, type Panel } from '../ui/panel.js';
@@ -45,6 +45,19 @@ export function createInspector(canvas: ShadowRoot): Inspector {
   const styleObserver = new MutationObserver(() => {
     invalidateStyleIndex();
     resetInheritCache();
+    void loadCssMap();
+    box = null;
+    target = null;
+    selectionDirty = selected !== null;
+    schedule();
+  });
+  const domObserver = new MutationObserver(() => {
+    if (!selected) return;
+    resetInheritCache();
+    box = null;
+    target = null;
+    selectionDirty = true;
+    schedule();
   });
 
   function schedule() {
@@ -73,11 +86,11 @@ export function createInspector(canvas: ShadowRoot): Inspector {
           target: describe(selected),
           rect: selectedRect,
           metrics: buildMetrics(selected, selectedRect, computed, match.rules),
-          transformed: computed.transform !== 'none',
+          transformed: hasTransformedChain(selected),
         });
       }
 
-      const key = `${Math.round(selectedRect.left)},${Math.round(selectedRect.top)},${Math.round(selectedRect.width)}`;
+      const key = `${Math.round(selectedRect.left)},${Math.round(selectedRect.top)},${Math.round(selectedRect.width)},${Math.round(selectedRect.height)}`;
       if (key !== placedKey) {
         placedKey = key;
         panel.place(selectedRect);
@@ -101,13 +114,19 @@ export function createInspector(canvas: ShadowRoot): Inspector {
     target = next;
 
     const rect = next.getBoundingClientRect();
-    if (changed || !box) box = readBox(getComputedStyle(next));
+    const hoverReliable = !hasTransformedChain(next);
+    if (changed || (!box && hoverReliable)) {
+      box = hoverReliable ? readBox(getComputedStyle(next)) : null;
+    }
+    const selectedReliable = selected ? !hasTransformedChain(selected) : true;
 
     const result: MeasureResult | null =
-      selectedRect && next !== selected ? measure(selectedRect, rect) : null;
+      selectedRect && next !== selected && selectedReliable && hoverReliable
+        ? measure(selectedRect, rect)
+        : null;
 
     overlay.render({
-      hover: { rect, box },
+      hover: { rect, box, geometryReliable: hoverReliable },
       pinned: selectedRect ? { rect: selectedRect } : null,
       result,
     });
@@ -187,6 +206,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
   };
 
   const onScroll = () => {
+    selectionDirty = selected !== null;
     schedule();
   };
 
@@ -218,6 +238,12 @@ export function createInspector(canvas: ShadowRoot): Inspector {
         subtree: true,
         characterData: true,
       });
+      domObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class', 'style', 'hidden'],
+        childList: true,
+        subtree: true,
+      });
     },
 
     stop() {
@@ -234,6 +260,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       window.removeEventListener('resize', onResize);
 
       styleObserver.disconnect();
+      domObserver.disconnect();
       resizeObserver.disconnect();
       selected = null;
       traversal = null;

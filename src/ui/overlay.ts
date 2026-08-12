@@ -13,7 +13,7 @@ export type Insets = { top: number; right: number; bottom: number; left: number 
 export type BoxModel = { margin: Insets; padding: Insets };
 
 export type OverlayState = {
-  hover: { rect: DOMRect; box: BoxModel } | null;
+  hover: { rect: DOMRect; box: BoxModel | null; geometryReliable: boolean } | null;
   pinned: { rect: DOMRect } | null;
   result: MeasureResult | null;
 };
@@ -210,8 +210,10 @@ export function createOverlay(root: ShadowRoot): Overlay {
 
     if (hover) {
       const rect = hover.rect;
-      frame(expand(rect, hover.box.margin), toBox(rect), TOKENS.margin);
-      frame(rect, shrink(rect, hover.box.padding), TOKENS.padding);
+      if (hover.box) {
+        frame(expand(rect, hover.box.margin), toBox(rect), TOKENS.margin);
+        frame(rect, shrink(rect, hover.box.padding), TOKENS.padding);
+      }
       highlight(rect, 'hover');
     }
 
@@ -225,7 +227,7 @@ export function createOverlay(root: ShadowRoot): Overlay {
         const inner = result.outer === 'a' ? b : a;
         drawContains(outer, inner);
       } else drawOverlap(a, b, result);
-    } else if (hover) {
+    } else if (hover?.geometryReliable) {
       const rect = hover.rect;
       labels.draw(`${fmt(rect.width)} × ${fmt(rect.height)}`, rect.left + rect.width / 2, rect.top - LABEL_H / 2 - 4);
     }

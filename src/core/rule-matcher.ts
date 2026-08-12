@@ -6,6 +6,7 @@ export type Declaration = {
   property: string;
   value: string;
   important: boolean;
+  order: number;
 };
 
 export type MatchedRule = {
@@ -17,6 +18,9 @@ export type MatchedRule = {
   specificity: Specificity;
   declarations: Declaration[];
   inline: boolean;
+  order: number;
+  layerRank: number | null;
+  occurrence: number;
 };
 
 export type MatchResult = {
@@ -27,27 +31,22 @@ export type MatchResult = {
 export function matchRules(el: Element): MatchResult {
   const index = getStyleIndex();
 
-  const matched: IndexedRule[] = [];
+  const matched = new Map<CSSStyleRule, IndexedRule>();
   for (const entry of index.rules) {
     if (!isActive(entry.conditions)) continue;
     if (!safeMatches(el, entry.selector)) continue;
-    matched.push(entry);
+    const current = matched.get(entry.rule);
+    if (!current || compare(entry.specificity, current.specificity) > 0) {
+      matched.set(entry.rule, entry);
+    }
   }
-
-  matched.sort((a, b) => {
-    const layerDiff = layerRank(a.layer, index.layerOrder) - layerRank(b.layer, index.layerOrder);
-    if (layerDiff !== 0) return -layerDiff;
-    const specDiff = compare(a.specificity, b.specificity);
-    if (specDiff !== 0) return -specDiff;
-    return b.order - a.order;
-  });
 
   const rules: MatchedRule[] = [];
 
   const inline = inlineRule(el);
   if (inline) rules.push(inline);
 
-  for (const entry of matched) {
+  for (const entry of matched.values()) {
     rules.push({
       selector: entry.selector,
       rawSelector: entry.rawSelector,
@@ -57,6 +56,9 @@ export function matchRules(el: Element): MatchResult {
       specificity: entry.specificity,
       declarations: readDeclarations(entry.rule.style),
       inline: false,
+      order: entry.order,
+      layerRank: layerRank(entry.layer, index.layerOrder),
+      occurrence: entry.occurrence,
     });
   }
 
@@ -76,13 +78,16 @@ function inlineRule(el: Element): MatchedRule | null {
     specificity: [1, 0, 0],
     declarations: readDeclarations(style),
     inline: true,
+    order: Number.MAX_SAFE_INTEGER,
+    layerRank: null,
+    occurrence: 0,
   };
 }
 
 function readDeclarations(style: CSSStyleDeclaration): Declaration[] {
   const out: Declaration[] = [];
 
-  for (const text of splitTopLevel(style.cssText, ';')) {
+  for (const [order, text] of splitTopLevel(style.cssText, ';').entries()) {
     const colon = indexOfTopLevel(text, ':');
     if (colon < 0) continue;
 
@@ -93,7 +98,7 @@ function readDeclarations(style: CSSStyleDeclaration): Declaration[] {
     const important = /!\s*important$/i.test(value);
     if (important) value = value.replace(/!\s*important$/i, '').trim();
 
-    out.push({ property, value, important });
+    out.push({ property, value, important, order });
   }
 
   return out;
@@ -133,13 +138,18 @@ function isActive(conditions: Condition[]): boolean {
         if (condition.text && !CSS.supports(condition.text)) return false;
       } catch {
       }
+      continue;
     }
+    // CSSOM does not expose a reliable, cross-browser evaluator for these
+    // element-dependent conditions. Omitting them is safer than presenting an
+    // inactive declaration as the cascade winner.
+    if (condition.kind === 'container' || condition.kind === 'scope') return false;
   }
   return true;
 }
 
-function layerRank(layer: string | null, order: string[]): number {
-  if (layer === null) return order.length + 1;
+function layerRank(layer: string | null, order: string[]): number | null {
+  if (layer === null) return null;
   const at = order.indexOf(layer);
   return at < 0 ? 0 : at;
 }

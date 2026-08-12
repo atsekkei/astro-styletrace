@@ -2,12 +2,15 @@ import { findInherited } from './inherit.js';
 import type { Source } from './resolve-source.js';
 import type { MatchedRule } from './rule-matcher.js';
 import { fmt, parsePx } from './units.js';
+import { compareCascade, type CascadeWeight } from './cascade.js';
 
 export type Candidate = {
   value: string;
   property: string;
   source: Source;
   selector: string;
+  important: boolean;
+  occurrence: number;
 };
 
 export type Metric = {
@@ -41,11 +44,7 @@ const INHERITED = new Set(['font-size', 'line-height']);
 
 const SHORTHANDS: Record<string, string[]> = {
   margin: ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'],
-  'margin-block': ['margin-top', 'margin-bottom'],
-  'margin-inline': ['margin-left', 'margin-right'],
   padding: ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'],
-  'padding-block': ['padding-top', 'padding-bottom'],
-  'padding-inline': ['padding-left', 'padding-right'],
   gap: ['row-gap', 'column-gap'],
   inset: ['top', 'right', 'bottom', 'left'],
   font: ['font-size', 'line-height'],
@@ -61,14 +60,14 @@ export function buildMetrics(
   const out: Metric[] = [];
 
   for (const property of PROPERTIES) {
-    let candidates = findCandidates(rules, property);
+    let candidates = findCandidates(rules, property, computed);
     let inheritedFrom: string | null = null;
 
     if (candidates.length === 0) {
       if (!INHERITED.has(property)) continue;
 
       const inherited = findInherited(el, (ancestorRules) => {
-        const found = findCandidates(ancestorRules, property);
+        const found = findCandidates(ancestorRules, property, computed);
         return found.length > 0 ? found : null;
       });
       if (!inherited) continue;
@@ -99,26 +98,81 @@ export function buildMetrics(
   return out;
 }
 
-function findCandidates(rules: MatchedRule[], property: string): Candidate[] {
-  const out: Candidate[] = [];
+function findCandidates(
+  rules: MatchedRule[],
+  property: string,
+  computed: CSSStyleDeclaration,
+): Candidate[] {
+  const out: { candidate: Candidate; weight: CascadeWeight }[] = [];
 
   for (const rule of rules) {
     for (const declaration of rule.declarations) {
-      if (declaration.property !== property && !covers(declaration.property, property)) continue;
+      if (
+        declaration.property !== property &&
+        !covers(declaration.property, property, computed.writingMode, computed.direction)
+      ) continue;
       out.push({
-        value: declaration.value,
-        property: declaration.property,
-        source: rule.source,
-        selector: rule.rawSelector,
+        candidate: {
+          value: declaration.value,
+          property: declaration.property,
+          source: rule.source,
+          selector: rule.rawSelector,
+          important: declaration.important,
+          occurrence: rule.occurrence,
+        },
+        weight: {
+          important: declaration.important,
+          inline: rule.inline,
+          layer: rule.layerRank,
+          specificity: rule.specificity,
+          order: rule.order,
+          declarationOrder: declaration.order,
+        },
       });
     }
   }
 
-  return out;
+  out.sort((a, b) => -compareCascade(a.weight, b.weight));
+  return out.map(({ candidate }) => candidate);
 }
 
-function covers(declared: string, property: string): boolean {
-  return SHORTHANDS[declared]?.includes(property) ?? false;
+function covers(
+  declared: string,
+  property: string,
+  writingMode: string,
+  direction: string,
+): boolean {
+  if (SHORTHANDS[declared]?.includes(property)) return true;
+
+  const vertical = writingMode.startsWith('vertical') || writingMode.startsWith('sideways');
+  const blockStart = vertical ? (writingMode.endsWith('-lr') ? 'left' : 'right') : 'top';
+  const blockEnd = vertical ? (blockStart === 'left' ? 'right' : 'left') : 'bottom';
+  const inlineStart = vertical
+    ? direction === 'rtl'
+      ? 'bottom'
+      : 'top'
+    : direction === 'rtl'
+      ? 'right'
+      : 'left';
+  const inlineEnd = vertical
+    ? inlineStart === 'top'
+      ? 'bottom'
+      : 'top'
+    : inlineStart === 'left'
+      ? 'right'
+      : 'left';
+
+  for (const prefix of ['margin', 'padding']) {
+    if (!property.startsWith(`${prefix}-`)) continue;
+    const side = property.slice(prefix.length + 1);
+    if (declared === `${prefix}-block`) return side === blockStart || side === blockEnd;
+    if (declared === `${prefix}-inline`) return side === inlineStart || side === inlineEnd;
+    if (declared === `${prefix}-block-start`) return side === blockStart;
+    if (declared === `${prefix}-block-end`) return side === blockEnd;
+    if (declared === `${prefix}-inline-start`) return side === inlineStart;
+    if (declared === `${prefix}-inline-end`) return side === inlineEnd;
+  }
+  return false;
 }
 
 function measureAll(
@@ -126,26 +180,32 @@ function measureAll(
   rect: DOMRect,
   computed: CSSStyleDeclaration,
 ): Record<string, number> {
-  const out: Record<string, number> = {
-    width:
-      rect.width -
+  const out: Record<string, number> = {};
+
+  // getBoundingClientRect() is an axis-aligned, post-transform box. Mixing it
+  // with pre-transform computed insets produces plausible-looking false data.
+  if (hasTransformedChain(el)) return out;
+
+  const borderBox = computed.boxSizing === 'border-box';
+  out.width = borderBox
+    ? rect.width
+    : rect.width -
       num(computed.borderLeftWidth) -
       num(computed.borderRightWidth) -
       num(computed.paddingLeft) -
-      num(computed.paddingRight),
-    height:
-      rect.height -
+      num(computed.paddingRight);
+  out.height = borderBox
+    ? rect.height
+    : rect.height -
       num(computed.borderTopWidth) -
       num(computed.borderBottomWidth) -
       num(computed.paddingTop) -
-      num(computed.paddingBottom),
-  };
+      num(computed.paddingBottom);
 
   const parent = el.parentElement;
   if (parent) {
     const content = contentBox(parent);
-    const before = previousBox(el);
-    const after = nextBox(el);
+    const siblings = siblingBoxes(el);
 
     const own = (value: number, margin: string) => (num(margin) === 0 ? null : value);
 
@@ -153,7 +213,7 @@ function measureAll(
       out,
       'margin-top',
       own(
-        before && before.bottom <= rect.top ? rect.top - before.bottom : rect.top - content.top,
+        directionalGap(rect, siblings, 'top') ?? rect.top - content.top,
         computed.marginTop,
       ),
     );
@@ -161,7 +221,7 @@ function measureAll(
       out,
       'margin-bottom',
       own(
-        after && after.top >= rect.bottom ? after.top - rect.bottom : content.bottom - rect.bottom,
+        directionalGap(rect, siblings, 'bottom') ?? content.bottom - rect.bottom,
         computed.marginBottom,
       ),
     );
@@ -169,7 +229,7 @@ function measureAll(
       out,
       'margin-left',
       own(
-        before && before.right <= rect.left ? rect.left - before.right : rect.left - content.left,
+        directionalGap(rect, siblings, 'left') ?? rect.left - content.left,
         computed.marginLeft,
       ),
     );
@@ -177,7 +237,7 @@ function measureAll(
       out,
       'margin-right',
       own(
-        after && after.left >= rect.right ? after.left - rect.right : content.right - rect.right,
+        directionalGap(rect, siblings, 'right') ?? content.right - rect.right,
         computed.marginRight,
       ),
     );
@@ -185,7 +245,7 @@ function measureAll(
 
   const display = computed.display;
   if (display.includes('flex') || display.includes('grid')) {
-    const gaps = measureGaps(el);
+    const gaps = measureGaps(el, computed.writingMode);
     if (gaps.row !== null) out['row-gap'] = gaps.row;
     if (gaps.column !== null) out['column-gap'] = gaps.column;
   }
@@ -210,18 +270,42 @@ function contentBox(el: Element): Box {
   };
 }
 
-function previousBox(el: Element): DOMRect | null {
-  const sibling = el.previousElementSibling;
-  return sibling ? sibling.getBoundingClientRect() : null;
+function siblingBoxes(el: Element): DOMRect[] {
+  const parent = el.parentElement;
+  if (!parent) return [];
+  return Array.from(parent.children)
+    .filter((sibling) => sibling !== el && participatesInLayout(sibling))
+    .map((sibling) => sibling.getBoundingClientRect());
 }
 
-function nextBox(el: Element): DOMRect | null {
-  const sibling = el.nextElementSibling;
-  return sibling ? sibling.getBoundingClientRect() : null;
+function directionalGap(
+  own: DOMRect,
+  candidates: DOMRect[],
+  side: 'top' | 'right' | 'bottom' | 'left',
+): number | null {
+  const vertical = side === 'top' || side === 'bottom';
+  const ownCenter = vertical ? (own.top + own.bottom) / 2 : (own.left + own.right) / 2;
+  const aligned = candidates.filter((box) => {
+    if (vertical && !overlaps(own.left, own.right, box.left, box.right)) return false;
+    if (!vertical && !overlaps(own.top, own.bottom, box.top, box.bottom)) return false;
+    const center = vertical ? (box.top + box.bottom) / 2 : (box.left + box.right) / 2;
+    return side === 'top' || side === 'left' ? center < ownCenter : center > ownCenter;
+  });
+  if (aligned.length === 0) return null;
+
+  if (side === 'top') return own.top - Math.max(...aligned.map((box) => box.bottom));
+  if (side === 'bottom') return Math.min(...aligned.map((box) => box.top)) - own.bottom;
+  if (side === 'left') return own.left - Math.max(...aligned.map((box) => box.right));
+  return Math.min(...aligned.map((box) => box.left)) - own.right;
 }
 
-function measureGaps(el: Element): { row: number | null; column: number | null } {
-  const boxes = Array.from(el.children).map((child) => child.getBoundingClientRect());
+function measureGaps(
+  el: Element,
+  writingMode: string,
+): { row: number | null; column: number | null } {
+  const boxes = Array.from(el.children)
+    .filter(participatesInLayout)
+    .map((child) => child.getBoundingClientRect());
   if (boxes.length < 2) return { row: null, column: null };
 
   const rows: number[] = [];
@@ -243,7 +327,25 @@ function measureGaps(el: Element): { row: number | null; column: number | null }
     }
   }
 
-  return { row: min(rows), column: min(columns) };
+  const physical = { row: min(rows), column: min(columns) };
+  return writingMode.startsWith('vertical') || writingMode.startsWith('sideways')
+    ? { row: physical.column, column: physical.row }
+    : physical;
+}
+
+function participatesInLayout(el: Element): boolean {
+  const style = getComputedStyle(el);
+  return style.display !== 'none' && style.position !== 'absolute' && style.position !== 'fixed';
+}
+
+export function hasTransformedChain(el: Element): boolean {
+  for (let current: Element | null = el; current; current = current.parentElement) {
+    const style = getComputedStyle(current);
+    if (style.transform !== 'none') return true;
+    const zoom = Number.parseFloat(style.getPropertyValue('zoom'));
+    if (Number.isFinite(zoom) && zoom !== 1) return true;
+  }
+  return false;
 }
 
 function overlaps(a0: number, a1: number, b0: number, b1: number): boolean {

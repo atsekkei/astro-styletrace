@@ -361,7 +361,7 @@ function renderSource(candidate: Candidate): HTMLElement {
     return el;
   }
 
-  const line = lineFor(candidate.source, candidate.selector);
+  const line = lineFor(candidate.source, candidate.selector, candidate.occurrence);
   const target = line === null ? file : `${file}:${line}`;
 
   const el = document.createElement('button');
@@ -392,7 +392,7 @@ function renderOthers(others: Candidate[]): HTMLElement {
 
     const value = document.createElement('span');
     value.className = 'cal-other-value';
-    value.textContent = `${candidate.property}: ${candidate.value}`;
+    value.textContent = `${candidate.property}: ${candidate.value}${candidate.important ? ' !important' : ''}`;
 
     const selector = document.createElement('span');
     selector.className = 'cal-other-selector';
