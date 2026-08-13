@@ -35,6 +35,9 @@
       "default": "./dist/app.js"
     }
   },
+  "bin": {
+    "astro-styletrace": "./dist/cli.js"
+  },
   "files": [
     "dist",
     "CHANGELOG.md"

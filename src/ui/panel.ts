@@ -42,6 +42,12 @@ export function createPanel(root: ShadowRoot): Panel {
   copy.textContent = 'Copy for agent';
   actions.appendChild(copy);
 
+  const agent = document.createElement('span');
+  agent.className = 'cal-agent';
+  agent.dataset.state = 'idle';
+  agent.textContent = 'Agent ready · .astro-styletrace/handoff.md';
+  actions.appendChild(agent);
+
   const hint = document.createElement('p');
   hint.className = 'cal-hint';
   hint.textContent =
@@ -140,6 +146,7 @@ export function createPanel(root: ShadowRoot): Panel {
     update(content) {
       previous = last && last.selectionKey === content.selectionKey ? last : null;
       last = content;
+      agent.dataset.state = 'ready';
       expanded = new Set();
       render();
     },
@@ -170,6 +177,7 @@ export function createPanel(root: ShadowRoot): Panel {
     hide() {
       el.setAttribute('data-visible', 'false');
       pinned = false;
+      agent.dataset.state = 'idle';
     },
     dim(on) {
       el.setAttribute('data-dim', String(on));

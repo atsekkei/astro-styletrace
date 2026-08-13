@@ -3,6 +3,13 @@ import launchEditorMiddleware from 'launch-editor-middleware';
 import type { StyletraceOptions } from './app.js';
 import { createCssMapStore } from './css-map.js';
 import { resolveEditorTarget } from './editor-request.js';
+import {
+  createStyletraceSession,
+  handleObservationSession,
+  handleSourceRead,
+  OBSERVATION_ENDPOINT,
+  SOURCE_ENDPOINT,
+} from './session.js';
 
 const OPEN_IN_EDITOR = '/__styletrace/open-in-editor';
 const CSS_MAP = '/__styletrace/css-map';
@@ -11,6 +18,7 @@ export type { StyletraceOptions };
 
 export default function styletrace(options: StyletraceOptions = {}): AstroIntegration {
   const cssMap = createCssMapStore();
+  const session = createStyletraceSession();
 
   return {
     name: 'astro-styletrace',
@@ -30,6 +38,14 @@ export default function styletrace(options: StyletraceOptions = {}): AstroIntegr
         server.middlewares.use(CSS_MAP, (_req, res) => {
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify(cssMap.snapshot()));
+        });
+
+        server.middlewares.use(OBSERVATION_ENDPOINT, (req, res) => {
+          handleObservationSession(session, server.config.root, req, res);
+        });
+
+        server.middlewares.use(SOURCE_ENDPOINT, (req, res) => {
+          handleSourceRead(server.config.root, req, res);
         });
 
         const launchEditor = launchEditorMiddleware(undefined, server.config.root, (file, error) => {

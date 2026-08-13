@@ -5,6 +5,7 @@ import { measure, type MeasureResult } from './measure.js';
 import { buildMetrics, hasTransformedChain } from './metrics.js';
 import { createInspectorObservation } from './observation.js';
 import { editorTarget } from './open-in-editor.js';
+import { clearObservation, publishObservation } from './session-client.js';
 import { invalidateStyleIndex } from './stylesheet-index.js';
 import { createOverlay, type BoxModel, type Overlay } from '../ui/overlay.js';
 import { createPanel, type Panel } from '../ui/panel.js';
@@ -91,17 +92,19 @@ export function createInspector(canvas: ShadowRoot): Inspector {
         const computed = getComputedStyle(selected);
         const match = matchCached(selected);
         const metrics = buildMetrics(selected, selectedRect, computed, match.rules);
+        const observation = createInspectorObservation({
+          target: describe(selected),
+          rect: selectedRect,
+          viewport: { width: innerWidth, height: innerHeight },
+          metrics,
+          transformed: hasTransformedChain(selected),
+          sourceTarget: editorTarget,
+        });
         panel.update({
           selectionKey,
-          observation: createInspectorObservation({
-            target: describe(selected),
-            rect: selectedRect,
-            viewport: { width: innerWidth, height: innerHeight },
-            metrics,
-            transformed: hasTransformedChain(selected),
-            sourceTarget: editorTarget,
-          }),
+          observation,
         });
+        publishObservation(observation);
       }
 
       const key = `${Math.round(selectedRect.left)},${Math.round(selectedRect.top)},${Math.round(selectedRect.width)},${Math.round(selectedRect.height)}`;
@@ -162,7 +165,10 @@ export function createInspector(canvas: ShadowRoot): Inspector {
     selectionDirty = el !== null;
     placedKey = '';
     if (el) resizeObserver.observe(el);
-    else panel.hide();
+    else {
+      panel.hide();
+      clearObservation();
+    }
     schedule();
   }
 

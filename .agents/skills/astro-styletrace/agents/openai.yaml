@@ -1,0 +1,4 @@
+interface:
+  display_name: "astro-styletrace"
+  short_description: "Use browser-selected Astro CSS context"
+  default_prompt: "Use $astro-styletrace to inspect the selected browser element and make the smallest CSS fix."

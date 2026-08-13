@@ -127,6 +127,48 @@ Line numbers come from a Vite `transform` hook where PostCSS collects `selector 
 - Selectors are matched through a normalization key (drop `[data-astro-cid-*]`, `'` → `"`, `*::before` → `::before`). The normalizer lives in one place, `src/core/css-map.ts`, and the dev server imports the same function
 - Rules whose line cannot be resolved (cross-origin, inline, key mismatch) fall back to the top of the file
 
+## Agent handoff
+
+Selecting an element writes two local files under the Astro project root:
+
+- `.astro-styletrace/current-observation.json`
+- `.astro-styletrace/handoff.md`
+
+The panel shows `Agent ready` when those files are prepared. From there you can ask any workspace-aware coding agent to read `.astro-styletrace/handoff.md` and fix the selected styling issue. The JSON uses the same vendor-neutral observation model that drives the panel, without DOM instances, browser storage, or editor open targets.
+
+CLI and MCP access are still available for agents or scripts that prefer pull-based reads:
+
+```bash
+npx astro-styletrace observation --url http://localhost:4321
+npx astro-styletrace source src/pages/index.astro --line 24 --url http://localhost:4321
+```
+
+The observation endpoint is updated only while a styletrace selection is active. `source` reads are restricted to files inside the Astro project root.
+
+For tools that speak MCP over stdio:
+
+```bash
+npx astro-styletrace mcp --url http://localhost:4321
+```
+
+The adapter exposes `styletrace_observation` and `styletrace_source`.
+
+### Optional agent skill
+
+Agents that support the open agent skills ecosystem can install the companion skill from the shared `.agents/skills/astro-styletrace` project skill:
+
+```bash
+npx skills add atsekkei/astro-styletrace --skill astro-styletrace
+```
+
+During local development of this repository:
+
+```bash
+npx skills add ./ --skill astro-styletrace
+```
+
+The skill teaches agents to read `.astro-styletrace/handoff.md` first, inspect `current-observation.json`, and make the smallest relevant CSS change.
+
 ## Architecture
 
 Everything except `src/index.ts` (the integration) and `src/app.ts` (the client shell) is free of Astro dependencies. This is machine-checked:

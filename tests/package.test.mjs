@@ -20,7 +20,9 @@ test('package tarball contains only publishable artifacts', async () => {
 
     assert(files.includes('dist/index.js'));
     assert(files.includes('dist/app.js'));
+    assert(files.includes('dist/cli.js'));
     assert(files.includes('dist/index.d.ts'));
+    assert(files.includes('dist/cli.d.ts'));
     assert(files.includes('README.md'));
     assert(files.includes('LICENSE'));
     assert(files.includes('CHANGELOG.md'));

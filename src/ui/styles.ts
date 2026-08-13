@@ -363,6 +363,8 @@ export const CSS = `
 .cal-actions {
   flex: none;
   display: flex;
+  align-items: center;
+  gap: ${U * 2}px;
   padding: ${U * 3}px ${U * 4}px;
   border-top: 1px dashed var(--cal-rule);
   background: var(--cal-surface);
@@ -402,6 +404,19 @@ export const CSS = `
 
 .cal-copy[data-state="fail"] {
   color: var(--cal-ink-3);
+}
+
+.cal-agent {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cal-accent);
+  font-size: var(--cal-size-s);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cal-agent[data-state="idle"] {
+  display: none;
 }
 
 .cal-others {

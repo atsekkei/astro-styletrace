@@ -35,4 +35,16 @@ Run these checks before publishing a beta build.
 1. Run `pnpm check`.
 2. Run `pnpm check:compat`.
 3. Run `npm publish --dry-run --tag beta`.
-4. Confirm production output does not include `astro-styletrace/app`, `/__styletrace/css-map`, or `/__styletrace/open-in-editor`.
+4. Confirm production output does not include `astro-styletrace/app`, `/__styletrace/css-map`, `/__styletrace/open-in-editor`, or `/__styletrace/session/*`.
+
+## Scenario E: Agent pulls current selection
+
+1. Start the playground and select an element with styletrace.
+2. Confirm the panel shows `Agent ready · .astro-styletrace/handoff.md`.
+3. Confirm `.astro-styletrace/current-observation.json` and `.astro-styletrace/handoff.md` exist in the project root.
+4. Ask a workspace-aware agent to read `.astro-styletrace/handoff.md` and confirm it can find the selected element and source lines without a CLI command.
+5. Run `npx astro-styletrace observation --url http://localhost:4321` and confirm the JSON includes `version`, element, viewport, declared candidates, computed values, measured values, selectors, and source lines.
+6. Run `npx astro-styletrace source <file-from-observation> --line <line> --url http://localhost:4321`.
+7. Confirm the source text is returned and path traversal outside the project root is rejected.
+8. Start `npx astro-styletrace mcp --url http://localhost:4321` from an MCP client and confirm `styletrace_observation` and `styletrace_source` are listed.
+9. Run `npx skills add atsekkei/astro-styletrace --skill astro-styletrace --list` after publishing the branch and confirm the skill is discoverable.
