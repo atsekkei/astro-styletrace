@@ -1,136 +1,429 @@
-# spec — astro-caliper
+# astro-caliper — CSS inspection and review specification
 
-Astro + Vanilla TS 開発サーバー向けの、hover でスタイルの出自と要素間距離を表示するインスペクタ。
-Astro Integration がクライアントスクリプトを注入し、ショートカットで起動する。DevTools を開かずに使う。
+Status: draft
 
-- パッケージ名: `astro-caliper`
-- 形態: Astro Integration（`injectScript` + Vite middleware）
-- 対象: dev のみ。production build には一切含まれない
-- 名前の由来: ノギス。2 点に当てて間隔を読む道具であり、「図面の寸法」ではなく「実際の寸法」を測る道具であること（§F2 の 3 列表示）に由来する
+Target release: first public beta
 
----
+Last updated: 2026-08-13
 
-## 1. 解決する課題
+## 1. Product definition
 
-| # | 課題 | 現状の回避策と、その不満 |
-| --- | --- | --- |
-| P1 | エージェントが書いたコードで、**どの要素のスタイルがどのファイルに書かれているか**わからない | DevTools の Styles pane で追える。が、`.astro` の scoped style / グローバル CSS / ユーティリティが混ざると出自が読み取りづらい |
-| P2 | `clamp()` / `rem` / `%` 指定が多く、**実際の距離が直感的にわからない** | Computed タブを都度開く。要素を切り替えるたびに往復が発生する |
-| P3 | **DevTools を開くとビューポートが実機サイズでなくなる** | undock すれば回避できるが、画面が狭くなる問題は残る |
-| P4 | 原因を特定したあと、**同じ情報を人間がプロンプトへ書き直さないとエージェントに修正を依頼できない** | 要素・プロパティ・値・ファイル・行をパネルから読み取り、手作業で説明する。転記漏れや曖昧な指示が起きる |
+astro-caliper は、AI coding agent が実装した Astro サイトの CSS について、人間が**どこに書かれ、ブラウザ上でどう効いているか**を理解し、自分で直すか agent へ任せるかを選べるローカル開発ツールである。
 
-この 4 つは同じレビュー作業（レイアウトを見ながら「これ何で決まってる？」と思い、原因を特定して修正を依頼するまで）の中で連続して発生する。
-**ひとつのオーバーレイで原因を特定し、その診断結果をそのままエージェントへ返せるようにする**のがこのツールの存在理由。
+短い定義:
 
----
+> AI が書いた CSS を、人間が理解して直すためのノギス。
 
-## 2. 非目標（作らないもの）
+英語での位置付け:
 
-明示的にスコープ外とする。ここを削ることで実装が 1/5 になる。
+> Understand and review AI-written CSS in Astro.
 
-- **CSS のライブ編集**。読み取り専用。編集はエディタでやる（エディタジャンプで繋ぐ）
-- **本番サイトでの利用**。ブラウザ拡張にはしない。dev server 前提だからこそ出自が取れる
-- **カスケードの完全再現**。「勝ったルール 1 つ」を断定しない（§6.4 参照）
-- DOM ツリービュー、ネットワーク、コンソール。DevTools の置き換えではない
-- **アクセシビリティ監査**。Astro 標準の Audit app がある
-- モバイル実機での動作。デスクトップブラウザのみ
-- **Astro 以外のフレームワークへの対応**。§3 の但し書きを参照
-- **値の途中経過の説明**。`var()` の実体、`clamp()` の式、px → rem / vw の逆算はいずれも出さない。知りたいのは「CSS にどう書いてあるか」と「実地はいくらか」の 2 点であって、その間の導出過程ではない（§F2）
-- **マッチしたルールの全件表示**。適用されている宣言だけを出す。詳細度・`@layer`・`!important` を UI に出さない（内部では候補の選定に使う。§6.4）
-- **汎用的なレポート出力**。パネル全体の完全なエクスポート、複数形式、履歴保存、共有 URL は作らない。ただし、AI エージェントへ修正を依頼するための簡潔な診断コンテキストは §F5 の通りコピーできる
+astro-caliper の中心は、agent に作業を送る機能ではない。中心にあるのは、実際のコンテンツが入ったブラウザで要素を選び、次を一度に確認できるインスペクターである。
 
----
-
-## 3. 前提環境
-
-- Astro 5 / 6 / 7（それぞれが同梱する Vite 6 / 7 / 8）
-- Vite dev server（Astro に内蔵）
-- Astro Dev Toolbar は**無効化されていてよい**（`devToolbar: { enabled: false }`）。このツールは toolbar に依存しない
-- 素の CSS / ネイティブ CSS ネスト / `.astro` の `<style>`
-- Chromium 系を第一ターゲット。Safari / Firefox は best-effort
-
-Tailwind やその他の CSS-in-JS は**初版では考慮しない**。ユーティリティクラスは「出自が 1 ファイルに集中する」ため、そもそもこのツールの課題設定に合わない。
-
-### Astro 専用にする判断
-
-出自解決の心臓部（`data-vite-dev-id`）は Vite の機能であり、Astro とは無関係に動く。したがって将来的に Vite 全般へ広げることは技術的に可能だが、**初版では意図的に Astro に絞る**。
-
-理由:
-
-1. Astro 環境でのみ `data-astro-cid-*` という**第 2 の解決経路**が使える（§6.2）。単一フレームワークに絞るほど堅くなる
-2. `injectScript('page', ...)` で dev のみに注入する経路が用意されている。本番混入を防ぐ仕組みを自前で持たなくていい
-3. 使うのは自分だけ。抽象化の受益者が存在しない
-
-### Dev Toolbar App を使わない判断
-
-初版は Astro Dev Toolbar App として実装していた（ShadowRoot・トグル UI・レイアウト非干渉が無料で手に入るため）。これをやめる。
-
-理由: **Dev Toolbar 自体を常時 OFF にして開発したい。** 画面下部の常駐バーが邪魔で、実際ほとんど使わない。しかし toolbar を無効化すると Dev Toolbar App も動かないため、両立しない。ツールの起動をショートカットに寄せるなら、toolbar から降りるしかない。
-
-降りることで自前で持つものが 3 つ増える。いずれも小さいが、忘れると壊れる（§6.1 / §6.6 / §F4）。
-
-1. ShadowRoot の器
-2. ヒットテストの自己除外の経路
-3. ON / OFF の可視化
-
-**ただし、後から切り出せる形は保っておく。** これは実質ゼロコストで効く保険。
-
-- `src/core/` 配下は **DOM と CSSOM 以外に依存しない**。Astro の型も Dev Toolbar の API も import しない
-- ソース解決は `resolveSource(sheet: CSSStyleSheet) => string` の 1 関数に閉じ込める。ここだけ差し替えれば別環境に移せる
-- Astro 依存は `src/index.ts`（Integration）と `src/app.ts`（Toolbar App の器）の 2 ファイルにのみ存在してよい
-
-この境界を守っていれば、Vite 版が必要になった時の作業は「器を作り直す」だけで済む。**守っていないと全面書き直しになる。** 差は数行の規律でしかないので、最初から守ること。
-
----
-
-## 4. 機能仕様
-
-### F1 — 距離計測モード
-
-Figma の Alt+カーソルに相当。
-
-- **基準要素の固定**: 要素を `Alt + Click` で選択する。選択中はハイライト表示が残る（選択はパネルの対象も兼ねる。§F4）
-- **計測**: 選択後、別の要素に hover すると、2 要素間の距離を矢印と数値で表示する。選択要素そのものを hover しているときは測る相手がいないので出さない
-- **位置関係の 3 パターンを出し分ける**:
-  - **分離**: 水平・垂直それぞれの gap を表示（重なっていない軸のみ）
-  - **内包**（一方が他方を含む）: 上下左右 4 方向の inset 距離を表示
-  - **交差**: 重なり幅を負値または明示ラベルで表示
-- **単独 hover**（選択なし）: hover 要素自身の `width × height` と、margin / padding のボックスを表示
-- **Esc** で選択解除
-
-### F2 — スタイル出自パネル
-
-hover 要素に**適用されている宣言**を、プロパティごとに 1 ブロックとして表示する。ブロックは常に同じ形をしている。
-
-```
-margin-top                        .row[data-astro-cid-j7pv25f6]  +2
-  declared   var(--space-l)
-  computed   64px
-  measured   64px
-src/pages/index.astro ↗
+```text
+どの要素を見ているか
+  → どのCSS宣言が関係しているか
+  → browserの計算値はいくつか
+  → 実際の寸法・距離はいくつか
+  → どの.astro / CSSファイルの何行か
 ```
 
-| 行 | 取得元 | 例 |
-| --- | --- | --- |
-| declared | `rule.style.getPropertyValue(prop)` | `var(--space-l)` |
-| computed | `getComputedStyle(el)[prop]` | `64px` |
-| measured | `getBoundingClientRect()` 差分 | `64px` |
-| セレクタ（右上） | `rule.selectorText` | `.row[data-astro-cid-j7pv25f6]` |
-| 出自（下） | `styleSheet.ownerNode.dataset.viteDevId` | `src/pages/index.astro` |
+その理解を得たあと、利用者は修正の大きさに応じて二つの経路を選ぶ。
 
-**3 行並べることが仕様の核心**。declared と computed の乖離が P2 を解決し、computed と measured の乖離（margin 相殺、flex の分配、`gap` と `justify-content` の競合）がバグの発見点になる。
+```text
+小さな修正
+  source file:lineを開く → 人間が編集 → HMRで確認
 
-**一致していても畳まない。** 常に 3 行出す。畳むと「今どの列を見ているのか」が行ごとに変わり、目が毎回位置を探し直すことになる。ブロックの形が固定であることのほうが、数行ぶんの高さより価値がある。
-
-`measured` が算出できないプロパティ（要素が 1 つしかない `row-gap` など）ではその行を落とす。**その場合も declared / computed の位置は動かさない。**
-
-#### 表示するプロパティ
-
-**宣言があるものだけを出す。** 「レイアウト関連を既定表示、残りは折り畳み」という切り分けはやめる。宣言されていないプロパティの行は、そもそも直しに行く先がない。
-
-対象となる longhand:
-
+複雑な修正
+  観測情報をagentへ渡す → agentが編集 → browserで確認
 ```
+
+## 2. Problem statement
+
+### 2.1 AI coding creates an ownership gap
+
+AI agent へコーディングを依頼すると、コードを短時間で生成できる一方、人間が実装の過程を追わなくなる。その結果、動いている画面とソースコードの間にある実装地図を人間が持てなくなる。
+
+特に CSS では、次の問いへすぐ答えられなくなる。
+
+- この余白はどのファイルで指定されているか
+- `.astro` の scoped style か、global CSS か、layout component か
+- どの selector と shorthand が効いているか
+- 表示中の宣言候補以外にも競合があるか
+- 自身の margin か、親の gap か、兄弟との相殺か
+- `var()` や `clamp()` が最終的に何pxになったか
+- CSS上の値と目に見える距離がなぜ違うか
+
+手書きで実装した場合、人間はファイル構成や selector を作業の記憶として持っている。agent が実装すると、その暗黙知が形成されない。コードは存在するが、人間が所有できていない状態になる。
+
+astro-caliper の第一の仕事は、**AIが書いたCSSの所在と作用を人間が取り戻すこと**である。
+
+### 2.2 CSS cannot be fully constrained by documentation
+
+ハーネス、プロンプト、`AGENTS.md`、コーディング規約、デザイントークンを整備することは重要だが、それだけで agent が期待どおりの CSS を実装できるとは限らない。
+
+CSS の最終結果はソースコード単体で決まらない。
+
+- 親、兄弟、包含ブロックとの関係
+- cascade、継承、margin collapse
+- flex / grid の分配
+- `rem`、`clamp()`、`minmax()`、割合、viewport unit
+- テキスト量、画像比率、CMSデータ
+- viewportとbreakpoint
+- browser layout algorithm
+
+静的な規約は書き方を制約できるが、実コンテンツを入れた結果の構図、余白、読みやすさまでは保証できない。最後には人間がブラウザを見る必要がある。
+
+### 2.3 Not every CSS fix should become an agent task
+
+CSS修正の多くは、原因箇所さえ分かれば小さい。
+
+- `gap`を少し変える
+- marginを削る
+- `max-width`を調整する
+- line-heightを合わせる
+- breakpointの値を直す
+
+このような修正で、agentへ状況を説明し、応答を待ち、差分をレビューする方が時間がかかることがある。
+
+したがって astro-caliper は、人間を常にagentへ誘導しない。**人間が自分で直す経路を最短にし、複雑な場合だけagentへ委譲できる**ことを重要な設計原則とする。
+
+### 2.4 Review should not change the viewport
+
+通常のDevToolsをdockしてCSSを調べると、pageのviewportが狭くなり、調べる前と異なるbreakpointや折返しへ変わることがある。undockすれば回避できるが、pageとDevToolsの往復が増える。
+
+astro-caliperはpage内の小さなoverlayとして動作し、layout flowへ参加しない。人間はレビュー対象のviewportを保ったまま、sourceとgeometryを確認できる。
+
+## 3. Why content-first websites and Astro
+
+### 3.1 Content-first websites
+
+アプリケーションUIでは、ボタン、フォーム、テーブル、モーダル等の反復的なコンポーネントと厳密なデザインシステムにより、agentの選択肢を狭めやすい。
+
+一方、コンテンツ中心のWebサイトでは次の傾向がある。
+
+- ページ固有のhero、editorial layout、記事導線が多い
+- CMSやMarkdownから可変長コンテンツが入る
+- 写真、図版、caption、proseがlayoutへ強く影響する
+- 再利用性よりページ文脈に合わせた構成が優先される
+- global style、layout、component-scoped styleが重なる
+- breakpointごとの細かな視覚調整が多い
+- デザインシステムで表現しきれない例外が残る
+
+この領域では「ルールどおり書かれたか」より、「実コンテンツを入れた結果が意図どおりか」の比重が高い。
+
+### 3.2 Why Astro
+
+Astro はコンテンツ中心のWebサイトに適しており、astro-caliper が対象とするCSSの複雑さが現れやすい。
+
+- `.astro` componentとscoped style
+- global stylesheetとlayout component
+- Markdown / MDX / content collections / CMS data
+- islandの外側を含む文書layout
+- responsive typographyと画像中心の構成
+- Astro 5 / 6 / 7にまたがるVite dev server
+
+技術的にも、Astro Integrationはdev commandだけへclientとmiddlewareを注入できる。Viteの`data-vite-dev-id`と`.astro`原文の解析を組み合わせることで、実画面から元の`.astro` / CSSファイルへ辿れる。
+
+Astro対応は最初の実装都合ではなく、**コンテンツファーストでCSSの理解と人間レビューが重要な領域へ集中する製品判断**である。
+
+## 4. Product principles
+
+1. **理解を最初に置く。** 修正やagent連携より前に、CSSの所在と作用を人間へ示す。
+2. **人間の自己修正を第一級にする。** 小さな修正へreview formやagent handoffを要求しない。
+3. **ソースへ最短で戻す。** propertyごとの`file:line`を直接開けるようにする。
+4. **ブラウザが事実を測る。** computed styleとgeometryは実行中のページから取得する。
+5. **断定しすぎない。** CSS宣言はwinnerではなくcandidateとして表現し、競合を示す。
+6. **agent連携は追加経路である。** インスペクター単体で価値を完結させる。
+7. **人間が委譲を選ぶ。** 特定agentやLLMへ自動送信しない。
+8. **ブラウザ内でソース編集しない。** 永続的な変更は使い慣れたeditorで行う。
+9. **小さく、Astro専用に保つ。** 汎用DevToolsやproject managementを目指さない。
+10. **dev onlyを構造で保証する。** production buildへ何も含めない。
+
+## 5. Target users and jobs
+
+### 5.1 Primary users
+
+- coding agentへAstroサイトの実装を依頼するWebデザイナー
+- agentが生成したCSSをレビューするフロントエンドエンジニア
+- 可変コンテンツと複雑なresponsive layoutを持つWebサイトの開発者
+
+### 5.2 Primary jobs
+
+優先順に並べる。
+
+1. 画面上の要素から、関係するCSSの`file:line`を見つける
+2. declared / computed / measuredを見て、何が起きているか理解する
+3. 小さなCSS修正なら、その場でeditorへ移って自分で直す
+4. HMR後の実画面で修正結果を確認する
+5. 複雑な修正なら、同じ観測情報をagentへ正確に渡す
+6. 将来的にはagentの修正を同じ条件で再計測する
+
+### 5.3 Two core workflows
+
+#### Workflow A — Understand and fix yourself
+
+```text
+違和感のある要素を選択
+  → 宣言候補・computed・measured・sourceを読む
+  → source file:lineをクリック
+  → editorでCSSを修正
+  → HMR後のpanelとoverlayで確認
+```
+
+これはbetaの主経路である。
+
+#### Workflow B — Delegate a complex fix
+
+```text
+違和感のある要素を選択
+  → 観測情報を構造化して取得
+  → agentへ修正を依頼
+  → agentが複数ファイルやresponsive behaviorを修正
+  → 実画面で人間が確認
+```
+
+betaでは`Copy for agent`がこの経路を担う。CLI / MCPと自動再計測は後続フェーズとする。
+
+## 6. Release scope
+
+### 6.1 First public beta
+
+現在の`src/`を製品の中核として公開品質へ仕上げる。
+
+- Astro 5 / 6 / 7、Vite 6 / 7 / 8
+- dev commandだけで起動するAstro Integration
+- shortcutによるON / OFF
+- hover hit testing
+- primary elementの選択
+- 選択要素とhover要素の距離計測
+- separated / contained / overlappingのoverlay
+- margin / padding box
+- declared candidate / computed / measured
+- shorthandからlonghandへの対応
+- competing candidateの展開
+- inherited typography source
+- `.astro` scoped styleを含むsource `file:line`
+- editor jump
+- HMR / resize / scrollに追従
+- `Copy for agent` fallback
+- production buildへの非混入
+
+### 6.2 Post-beta extensions
+
+betaの人間向け体験を壊さない順序で追加する。
+
+1. HMRやAstro navigation後の選択再解決
+2. 構造化されたobservation JSON
+3. 2要素を固定したrelation inspector
+4. local CLI / MCPによるagent pull
+5. 人間が指定した期待値のlive re-measure
+
+### 6.3 Explicitly out of scope
+
+- 汎用的なWeb annotation service
+- コメントスレッド、担当者、severity、期限
+- GitHub issue、commit、branch、PR同期
+- screenshot中心のvisual regression
+- console、network、application state収集
+- agentやLLM APIの内蔵
+- ブラウザ内CSS editor
+- 自動的な原因診断や修正案生成
+- デザインシステム生成
+- DOM treeを含むDevTools全体の代替
+- accessibility audit
+- cloud storage、共有URL、remote MCP
+- React / Vue / Svelteへの早期展開
+- 本番環境や第三者サイトでの利用
+
+## 7. Beta user experience
+
+### 7.1 Setup
+
+```bash
+npm install -D <published-package-name>
+```
+
+```js
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import caliper from '<published-package-name>';
+
+export default defineConfig({
+  integrations: [caliper()],
+});
+```
+
+パッケージ公開名は別release taskで確定する。本仕様では製品名を`astro-caliper`と記す。
+
+### 7.2 Interaction model
+
+| Action | Behavior |
+| --- | --- |
+| `Ctrl + Shift + C` | caliperのON / OFF。設定可能 |
+| `Alt`を押してhover | box modelと計測overlayを表示 |
+| `Alt + Click` | 要素を選択しpanelを開く。同じ要素で解除 |
+| 選択後に別要素をhover | 選択要素との距離を表示 |
+| `Alt + ↑ / ↓` | hover targetを親 / 子へ移動 |
+| `Esc` / panel外click | 選択解除してpanelを閉じる |
+
+探索と読解を分ける。
+
+- hover中はoverlayだけを更新する
+- panelは選択要素へ固定し、hoverで内容を変えない
+- `Alt`を押している間はpanelを減光する
+- panel外clickは閉じるが、page側へのclickは妨げない
+- ON状態は画面隅のindicatorで常に示す
+
+### 7.3 Inspector panel
+
+```text
+┌──────────────────────────────────────┐
+│ section.hero             1088 × 312 │
+├──────────────────────────────────────┤
+│ margin-top         .hero[data-…] +2 │
+│ │ declared candidate  var(--space-l) │
+│ │ computed            64px           │
+│ │ measured            112px          │
+│ src/pages/about.astro:84 ↗           │
+│                                      │
+│ row-gap             .content         │
+│ │ declared candidate  2rem via gap   │
+│ │ computed            32px           │
+│ │ measured            48px           │
+│ src/components/Hero.astro:42 ↗       │
+├──────────────────────────────────────┤
+│ Copy for agent                       │
+│ Alt measure · Alt+Click select · …   │
+└──────────────────────────────────────┘
+```
+
+UIの優先順位:
+
+1. propertyと値
+2. source `file:line`
+3. competing candidates
+4. `Copy for agent`
+
+`Copy for agent`は残すが、source linkや値より強いCTAにしない。
+
+### 7.4 Human self-fix flow
+
+source link自体をclick targetとし、別の`Open` buttonは置かない。
+
+```text
+src/pages/about.astro:84 ↗
+```
+
+clickすると、`launch-editor-middleware`を経由して設定済みeditorの該当行を開く。
+
+- propertyごとにsource linkを持つ
+- lineを解決できなければfile先頭を開く
+- competing candidateを展開した場合、各候補もsource linkを持つ
+- open後もbrowserの選択とpanelを維持する
+- HMR後に同じDOM nodeが残っていれば値を再計算する
+- nodeが置換された場合は安全に選択を解除する。自動再解決はpost-beta
+
+### 7.5 Why no browser CSS editor
+
+人間の自己修正を支援するが、panel内でCSSを書き換える機能は作らない。
+
+- 一時的なCSSOM変更とsource変更が混同される
+- HMRで消える変更が生まれる
+- format、lint、type checking、Git diffをeditorから切り離す
+- 複数候補やshorthandのどこへ保存するか断定が必要になる
+
+astro-caliperは「直す場所と理由」を明らかにし、永続編集はeditorへ任せる。
+
+### 7.6 Agent handoff in beta
+
+`Copy for agent`は、選択要素について収集済みの事実をplain textでコピーする。
+
+含める情報:
+
+- element labelとborder box
+- viewport
+- property
+- declared candidateとshorthand元
+- computed
+- measured
+- selector
+- source `file:line`
+- competing candidate count
+
+含めない情報:
+
+- 原因の自然言語推測
+- 自動生成した修正案
+- DOM subtree全体
+- input value等のページデータ
+- API tokenやhome directory
+
+これはコピー後の会話を完全自動化する機能ではなく、対象とCSS根拠の転記ミスを防ぐfallbackである。
+
+## 8. Inspection semantics
+
+### 8.1 Declared candidate
+
+`declared candidate`は、対象propertyへ寄与する宣言をcascade weightで並べた最上位候補である。
+
+- cascade winnerと断定しない
+- shorthandは対象longhandへ割り当てる
+- 元のpropertyを`via margin-block`等で示す
+- 候補が複数なら`+N`を表示
+- 展開時にselector、value、sourceを表示
+
+candidateが1件でも、UIとコピーでは`declared candidate`という名称を維持する。
+
+### 8.2 Computed
+
+`getComputedStyle()`が返す解決済みvalueを表示する。
+
+- pxへ解決できる値は小数1桁まで
+- それ以外はbrowserの文字列を保持
+- computedを唯一のCSS上のground truthとして扱う
+- `var()`の内部展開過程やpxからremへの逆算は行わない
+
+### 8.3 Measured
+
+`getBoundingClientRect()`と周辺geometryから、目に見える寸法・距離を算出する。
+
+- width / height: content boxまたは仕様上明示したbox
+- margin: siblingまたはparent content boxとの実距離
+- row-gap / column-gap: children間の実gap
+- padding / typography: 無理にgeometryへ変換せずcomputedだけ
+
+測れないpropertyにはもっともらしい値を出さない。
+
+### 8.4 Divergence
+
+computedとmeasuredの差が`0.5px`を超えた場合、rowを視覚的に強調する。ただしエラーとは断定しない。
+
+差の原因例:
+
+- margin collapse
+- sibling margin
+- flex / grid distribution
+- `gap`と`justify-content`
+- box sizing
+- transform
+- subpixel layout
+
+### 8.5 Inheritance
+
+`font-size`と`line-height`は、対象要素に宣言がなければancestorを遡って最初の宣言元を表示する。
+
+```text
+computed  16px ← body
+```
+
+継承しないpropertyではancestor探索を行わない。
+
+### 8.6 Properties
+
+宣言があるものだけを表示する。
+
+```text
 margin-top / margin-right / margin-bottom / margin-left
 padding-top / padding-right / padding-bottom / padding-left
 row-gap / column-gap
@@ -138,536 +431,497 @@ font-size / line-height
 width / height
 ```
 
-- ショートハンド（`margin-block`、`gap`、`inset` など）で書かれていた宣言は longhand に割り当てて出す。declared 行には**書かれていたプロパティ名を添える**（`var(--space-l) via margin-block`）
-- `width` / `height` は**明示的な宣言があるときだけ**行を立てる。実寸はパネル右上に常時出ているので、宣言が無ければ重複でしかない
-- 並び順は `margin` → `padding` → `gap` → `font-size` / `line-height` → `width` / `height`
+`width` / `height`は明示宣言がある場合だけrowを作る。border boxの実寸はpanel headerへ常時表示する。
 
-#### 継承で決まっているとき
+## 9. Measurement overlay
 
-`font-size` / `line-height` に限り、**その要素に宣言が無ければ継承元を辿って出す**。「なぜこの文字が 16px なのか」は継承元を知りたい質問であり、宣言が無いときこそ答えが要る。
+### 9.1 Single element
 
-- 親方向へ遡って最初に宣言を持つ要素を探し、その要素・セレクタ・出自を表示する
-- 継承であることが分かる形にする（`16px ← body`）
-- 他のプロパティには適用しない。継承しないプロパティで遡っても意味がない
+選択なしのhoverでは次を表示する。
 
-#### 同一プロパティが複数箇所で宣言されているとき
+- border box
+- width × height
+- margin box
+- padding box
+- transform chainによるgeometry warning
 
-declared に出すのは詳細度で選んだ**最有力候補**であって、勝ったルールではない（§6.4）。したがって候補が外れている可能性が常にある。外れていることは declared / computed の並びでは検出できない（`var(--space-l)` と `64px` は正しく解決されていても文字列としては一致しないため、乖離が常態）。
+### 9.2 Selected element and hover target
 
-**対処**: 同じ longhand を担う宣言が他にもある場合、ブロック右上に件数を出す（`+2`）。クリックで残りの宣言をその場に展開し、それぞれのセレクタと出自を出す。既定は畳んだまま。
+選択後に別要素をhoverすると、2要素の位置関係を表示する。
 
-これは一覧機能ではなく、**「表示している 1 件が外れているかもしれない」という信号**である。件数が付いていない行は候補が 1 つしかないので、そのまま信じてよい。
+- separated: 重なっていないaxisのgap
+- contained: 上下左右のinset
+- overlapping: overlap geometry
+- 選択要素自身をhoverした場合はrelationを表示しない
 
-### F3 — エディタジャンプ
+### 9.3 Drawing
 
-各ブロックの出自ファイル名をクリックするとエディタで開く。§6.9 参照。
+- 単一SVG layer
+- `position: fixed`
+- `getBoundingClientRect()`のviewport座標で統一
+- selected targetは実線
+- hover targetは破線
+- guide lineとdistance labelを表示
+- labelがgapへ収まらない場合は外側へ逃がす
+- viewport端でlabel位置を反転
+- `pointer-events: none`
 
-- 行番号マップが引けるなら `file:line` へ、引けなければファイル先頭へ
-- ブロックごとに出自が違いうる（リセット CSS + グローバル + scoped style が混ざる）ため、**リンクはブロック単位で持つ**。パネル単位でまとめない
-- `open` / `copy` のようなボタンは置かない。ファイル名自体がリンクであれば足りる
+### 9.4 Invalidations
 
-### F4 — 起動と終了
+- scroll capture
+- resize
+- selected elementの`ResizeObserver`
+- style / DOM mutation
+- Vite HMR
+- `astro:after-swap`
 
-- **ショートカットで ON / OFF**（既定 `Ctrl + Shift + C`。統合オプションで差し替え可能）。Astro Dev Toolbar には依存しない
-- ON の間は `Alt` 押下中のみ計測オーバーレイが出る（Alt を離すと消える）。常時表示だと通常の操作ができない
-- **ON であることが分かる常駐表示を持つ**。ショートカットで入るモードは状態が見えないと迷う。画面隅に小さいインジケータを出す（Alt を押していない間も表示）
+DOM readとSVG writeを`requestAnimationFrame`内で分離する。
 
-#### 探すことと読むことを分ける
+## 10. CSS source resolution
 
-オーバーレイとパネルを同じ状態に載せない。ホバーに追従するパネルは、探索中は視界を横切る邪魔者であり、読もうとすると手を止めた瞬間に対象が変わる。
+### 10.1 Source file
 
-- **パネルの既定は非表示。** `Alt` 押下中（＝探索中）も出さない。オーバーレイだけで寸法と距離は読める
-- **`Alt + Click` は「選択」。** 距離計測の基準点であると同時に、パネルが映す対象でもある。この 2 つを別々に持たない。パネルの内容はホバーでは書き換わらない
-- **選択があること = パネルが開いていること。** 状態を 1 つにする。選択解除の経路（`Esc` / 同じ要素の再クリック / パネル外クリック）は全て「解除して閉じる」で揃える
-- 表示中に `Alt` を押し直したらパネルは**消さずに `opacity: .2` へ落とす**。消すと押すたびに現れ直して落ち着かず、位置も見失う。落ちている間は `pointer-events: none` にして下の要素を測れるようにする
-- パネル外クリックは**閉じるだけでページに伝播させる**。caliper はモーダルではなく観察器なので、ページ操作を 1 回飲み込むほうが害が大きい
-- 透明なまま板を残さない。非表示のパネルは `pointer-events: none`（不可視の板がページのクリックを奪う）
-
-### F5 — Copy for agent
-
-選択要素について caliper が収集した診断結果を、AI エージェントへそのまま貼れるプレーンテキストとしてクリップボードへコピーする。これは汎用エクスポートではなく、**人間が確認した対象と観測値をエージェントへ正確に返すための handoff** である。
-
-- パネルのフッターに `Copy for agent` ボタンを 1 つ置く
-- コピーはボタンを押したときだけ行う。自動コピーや外部サービスへの送信はしない
-- コピー成功後、ラベルを `Copied` へ一時的に変えて成功を知らせる。その後 `Copy for agent` に戻す
-- グローバルな `Cmd/Ctrl + C` は割り当てない。ページ本来のコピー操作を奪わない
-- 出力はプレーンテキスト 1 形式だけとする。Markdown / JSON の選択 UI、テンプレート編集、履歴保存は作らない
-- 自然言語で原因を推測しない。**観測できた事実とソース位置だけを出す**。原因の診断と修正は受け取ったエージェントに任せる
-
-#### コピーする情報
-
-- 選択要素の短い記述（tag / id / class）と border-box の実寸
-- 現在の viewport の幅と高さ
-- 表示中の各プロパティについて、property、declared candidate、shorthand 元、computed、measured、selector、source `file:line`、競合候補数
-- measured を算出できないプロパティはその行を省略する
-- 行番号が解決できない source はファイルパスだけを出す
-
-declared はカスケード上の勝者と断定できないため、パネルから独立して読まれるコピー内では必ず **`declared candidate`** と表記する。候補が 1 件だけでも `declared` へ短縮しない。
-
-#### 出力例
-
-```text
-[astro-caliper]
-
-Element: section.hero
-Border box: 1088 × 312px
-Viewport: 1440 × 900px
-
-margin-top:
-- declared candidate: var(--space-l) via margin-block
-- computed: 64px
-- measured: 112px
-- selector: .hero[data-astro-cid-j7pv25f6]
-- source: src/pages/index.astro:84
-- competing candidates: 2
-
-row-gap:
-- declared candidate: 2rem via gap
-- computed: 32px
-- measured: 48px
-- selector: .content[data-astro-cid-j7pv25f6]
-- source: src/components/Hero.astro:42
-- competing candidates: 0
-```
-
----
-
-## 5. UI 仕様
-
-### レイアウト非干渉
-
-Dev Toolbar App をやめたため、**器は自前で持つ**（§3）。
-
-- host 要素を 1 つ作り、`attachShadow({ mode: 'open' })` した中に全てを描く。ページの CSS は入ってこないし、こちらの CSS も漏れない
-- host は `document.documentElement` 直下に置く。`body` 直下に足すと `body > *:last-child` / `:nth-child()` を使っているページに影響が出る
-- host は `position: fixed`。ドキュメントフローに参加させない
-- オーバーレイの全要素に `pointer-events: none`。イベントを奪ってはならない
-- パネル本体（クリック可能）のみ `pointer-events: auto`
-- オーバーレイのテキストに `user-select: none`
-
-### キーバインド
-
-| キー | 動作 |
-| --- | --- |
-| `Ctrl + Shift + C`（既定） | astro-caliper の ON / OFF |
-| `Alt`（押下中） | 計測オーバーレイ表示（パネルは出さない） |
-| `Alt + Click` | 要素を選択（＝距離計測の基準 + パネルの対象）。同じ要素で解除 |
-| `Esc` / パネル外クリック | 選択解除 + パネルを閉じる |
-| `Alt + ↑ / ↓` | hover 要素を親 / 子へ移動（細かい要素を掴むため） |
-
-起動ショートカットは統合オプションで差し替えられること。ページ側のハンドラと衝突したときに逃げ道が無いと詰む。
-
-### デザイントークン
-
-```
-font-family    Inter, system-ui, sans-serif
-font-size      14px（値・プロパティ名） / 12px（ラベル・出自・セレクタ）
-line-height    1.2
-space unit     4px（余白は全てこの倍数）
-radius         16px（パネル） / 4px（インジケータなどの小片）
-```
-
-| 役割 | 値 |
-| --- | --- |
-| パネル背景 | `#F2F2F2` 90% + `backdrop-filter: blur()` |
-| 主テキスト（値・プロパティ名） | `#000000` |
-| 副テキスト（`declared` / `computed` / `measured` のラベル） | `#4D4D4D` |
-| 三次テキスト（セレクタ、件数バッジ） | `#808080` |
-| 罫・区切り・ブロックの縦罫 | `#B3B3B3` |
-| リンク（出自ファイル名） | `#0000FF` |
-
-- パネルの内側の余白は 16px、ブロック間は 16px、ブロック内の行間は 4px の倍数で刻む
-- **明色のパネルが明色のページの上に出る**ので、背景 90% と blur だけでは輪郭が消える。`#B3B3B3` の 1px ボーダーか影で境界を必ず作る
-- 区切り線は破線で軽く。実線の罫を増やすと表が固くなる
-
-### 数値表示
-
-- **`font-variant-numeric: tabular-nums` 必須**。等幅フォントをやめた以上、これが無いと hover 移動中に桁が踊る。Inter は tabular figures を持っているので指定すれば効く
-- 小数は 1 桁まで（`28.8px`）。それ以上は視覚ノイズ
-
-### パネルの構造
-
-```
-┌─────────────────────────────────┐
-│ section.row          1088 × 144 │  ← 見出し。要素の記述 + 実寸
-├ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
-│ margin-top      .row[data-…] +2 │  ← プロパティ名 / セレクタ / 候補件数
-│ │ declared  var(--space-l)      │
-│ │ computed  64px                │
-│ │ measured  64px                │
-│ src/pages/index.astro ↗         │  ← 出自リンク
-│                                 │
-│ …（ブロックが続く）             │
-├ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
-│ Copy for agent                  │  ← 明示操作で診断コンテキストをコピー
-│ Alt measure · Alt+Click pin · … │  ← キーバインドのヒント
-└─────────────────────────────────┘
-```
-
-- 見出しは sticky。スクロールしても「今どの要素を見ているか」を失わない
-- ブロックの左には `#B3B3B3` の縦罫を 1 本引き、declared / computed / measured がひとまとまりであることを示す
-- ラベル列（`declared` など）は 12px・`#4D4D4D`、値は 14px・`#000000`。**強さの差はサイズと濃度でつける。ラベルを右揃えにしない**（値の左端が揃っていることのほうが重要）
-- 状態バッジは `transformed` のみ。見出し行に置く
-- **要素によらず同じ内容が出続けるものはバッジにしない。** `cid …`（Astro のスコープ属性）と `unreadable: …`（読めなかったシート）はどちらも文書単位の事実なので、要素ごとのパネルに出すと常時点いている飾りにしかならない。前者はセレクタに既に現れており、後者を出すならインジケータ側（§F4）が居場所。`pinned` も同様で、パネルは選択要素しか映さない以上（§F4）常時点く
-- 出自リンクは既定のブラウザリンク装飾を使わない。下線は hover 時のみ、`↗` は小さく。**値より目立たせない**
-- `Copy for agent` は出自リンクや値より強く見せない。成功時だけ同じ位置で `Copied` に変わり、レイアウトを動かさない
-
-### パネルの位置
-
-hover 要素の近傍にフローティング。ビューポート端で反転させる。ただし**追従アニメーションは付けない**（毎フレーム動く対象に慣性を付けると読めなくなる）。
-
-### オーバーレイの配色
-
-パネルが無彩色 + 青になったため、ページ上に描く SVG も**同じ体系に寄せる**。パネルとオーバーレイが別のツールに見えてはいけない。
-
-| 役割 | 値 |
-| --- | --- |
-| hover 要素の枠 | `#0000FF` |
-| 選択要素の枠 | `#000000` |
-| 計測の矢印・ガイド線・ラベル | `#0000FF` |
-| margin ボックスの塗り | `#0000FF` 10% |
-| padding ボックスの塗り | `#0000FF` 20% |
-
-選択と hover の区別は**色ではなく線種**でつける（選択は実線、hover は破線）。彩度を 1 色に絞ったぶん、区別は形に持たせる。
-
----
-
-## 6. 技術仕様
-
-### 6.1 アーキテクチャ
-
-```
-astro.config.mjs
-  └─ integrations: [caliper({ shortcut: 'Ctrl+Shift+C' })]
-       │
-       ├─ astro:config:setup
-       │    └─ if (command === 'dev') injectScript('page', boot)   ← クライアント側
-       │
-       └─ astro:server:setup
-            └─ server.middlewares.use('/__caliper/open-in-editor', launchEditor)
-            └─ server.middlewares.use('/__caliper/css-map', ...)   ← M6
-```
-
-`injectScript('page', ...)` は **`command === 'dev'` のときだけ呼ぶ**。これが本番混入を防ぐ唯一の関門なので、条件を外さないこと。
-
-クライアント側 `app.ts` の責務:
-
-```
-boot()                             ← ここだけが Astro を知っている
-  ├─ host = <div> + attachShadow() … 器を自前で作る（§5）
-  ├─ ショートカットの待ち受け      … ON / OFF
-  ├─ インジケータ                  … ON であることの可視化
-  └─ createInspector(shadowRoot)
-       ├─ StyleSheetIndex   … document.styleSheets を走査してルールを索引化
-       ├─ RuleMatcher       … el → マッチしたルール[] を解決
-       ├─ Measurer          … 2 要素間の距離を算出
-       ├─ Overlay           … ShadowRoot に描画
-       └─ Panel             … ShadowRoot に描画
-            ↑ 以上は core / ui。DOM + CSSOM のみに依存する（§3 参照）
-```
-
-`boot` が ShadowRoot を作り、それを `createInspector` に渡すだけ。core / ui 側は「描画先の ShadowRoot をもらう」としか知らない。この一点を守れば §3 の境界が成立する。
-
-**Dev Toolbar App 時代との差分は `boot` の中身だけ**であること。器の作り方が変わっても core が変わらないなら、§3 の境界は正しく引けている。
-
-### 6.2 ソースファイルの解決 — このツールの心臓部
-
-Vite dev server は**全ての `<style>` タグを `data-vite-dev-id` 属性つきで `<head>` に注入する**。この属性がソースファイルの絶対パスを持つ。
+Viteが注入する`<style data-vite-dev-id>`からsource pathを解決する。
 
 ```ts
 function sourceOf(sheet: CSSStyleSheet): string {
   const node = sheet.ownerNode as HTMLElement | null;
-  return node?.dataset?.viteDevId    // Vite が注入した <style>
-      ?? sheet.href                   // <link rel=stylesheet>
-      ?? '(inline)';
+  return node?.dataset.viteDevId ?? sheet.href ?? '(inline)';
 }
 ```
 
-`.astro` の scoped style も同じ経路を通るので、`src/components/Card.astro` まで解決できる。
+`.astro` scoped styleも同じ経路で元componentまで辿る。
 
-**補助経路**: Astro の scoped style は要素に `data-astro-cid-XXXXXXXX` 属性を付ける。ルール解決が失敗したときのフォールバックとして逆引きに使える。
+### 10.2 Selector to line map
 
-ただし**単独では表示しない**。scoped style がマッチしていればセレクタに `[data-astro-cid-…]` として既に現れているため、それとは別に cid を出しても同じ文字列が 2 度出るだけになる。
+CSSOMはsource lineを持たないため、Vite pluginの`transform` hookでmapを構築する。
 
-### 6.3 ルールの走査
+- CSSをPostCSSでparse
+- `.astro`はcompile後codeではなくoriginal fileを再読込
+- `<style>` blockのoffsetを加算
+- selectorをnormalizeしてline配列へ対応
+- 同じselectorの複数出現をoccurrenceで区別
+- `/__caliper/css-map`からbrowserへ配布
+- browser startup時に一度取得し、hoverごとにfetchしない
+
+### 10.3 Selector normalization
+
+- `[data-astro-cid-*]`を正規化
+- quote差を吸収
+- `*::before`と`::before`を正規化
+- selector listを個別keyでも保持
+- normalization logicをserverとbrowserで共有
+
+### 10.4 CSS rule walking
+
+- native nestingの`&`をparent selectorへ解決
+- nested `@media` / `@supports` / `@layer` / `@container`を再帰走査
+- `CSSNestedDeclarations`を取りこぼさない
+- `:is()` / `:where()` / `:has()`を含むspecificityを計算
+- cross-origin stylesheetの`SecurityError`を捕捉
+- unreadable sheetを索引上は保持するがproperty sourceとして断定しない
+
+### 10.5 Editor jump security
+
+- queryのfile pathを正規化
+- project root外を拒否
+- lineは正のintegerだけ許可
+- arbitrary commandを受け取らない
+- editor選択は`LAUNCH_EDITOR` / `EDITOR`またはrunning editorへ任せる
+
+## 11. Architecture
+
+### 11.1 Current composition
+
+```text
+Astro Integration (src/index.ts)
+  ├─ dev commandだけでpage scriptをinject
+  ├─ CSS map Vite plugin
+  ├─ /__caliper/css-map
+  └─ /__caliper/open-in-editor
+
+Browser boot (src/app.ts)
+  ├─ host + ShadowRoot
+  ├─ shortcut
+  ├─ indicator
+  └─ inspector
+       ├─ hit testing
+       ├─ stylesheet index / rule matcher
+       ├─ metrics / geometry
+       ├─ SVG overlay
+       └─ source panel / agent context
+```
+
+### 11.2 Dependency boundaries
+
+```text
+src/
+├─ index.ts                 Astro Integration
+├─ app.ts                   browser boot
+├─ css-map.ts               Node/Vite側のline map
+├─ core/                    DOM/CSSOMによる観測ロジック
+└─ ui/                      overlay、panel、indicator、styles
+```
+
+- `core/`と`ui/`は`astro`をimportしない
+- Node built-insとVite pluginはbrowser bundleへ入れない
+- Astro hook wiringは`index.ts`へ閉じ込める
+- `check:boundary`で機械検査する
+- 将来のCLI/MCP追加時も既存coreをlocal APIへ依存させない
+
+### 11.3 Host isolation
+
+- hostを`document.documentElement`直下へ追加
+- ShadowRootへ全UIを描画
+- page CSSをUIへ入れず、UI CSSをpageへ漏らさない
+- hostに`data-caliper`を付けhit testingから除外
+- Astro Dev Toolbarも除外
+- invisible panelは`pointer-events: none`
+
+## 12. Post-beta agent extension
+
+agent連携は製品の第二経路であり、beta公開を妨げない。
+
+### 12.1 Structured observation
+
+現在のplain text formatterの前に、versioned JSONを正本として導入する。
 
 ```ts
-type Matched = {
-  rule: CSSStyleRule;
-  file: string;
-  conditions: string[];   // 包んでいる @media / @supports / @container
-  layer: string | null;   // @layer 名
-  specificity: [number, number, number];
+type InspectorObservation = {
+  schemaVersion: 1;
+  route: string;
+  viewport: { width: number; height: number };
+  target: {
+    label: string;
+    rect: { width: number; height: number };
+  };
+  metrics: MetricObservation[];
+  warnings: string[];
 };
-
-function walk(rules: CSSRuleList, ctx: Ctx, visit: (r: CSSStyleRule, ctx: Ctx) => void) {
-  for (const rule of Array.from(rules)) {
-    if (rule instanceof CSSStyleRule) {
-      visit(rule, ctx);
-      // ネイティブ CSS ネスト: CSSStyleRule 自身が子ルールを持つ
-      if (rule.cssRules?.length) {
-        walk(rule.cssRules, { ...ctx, parentSelector: rule.selectorText }, visit);
-      }
-    } else if ('cssRules' in rule) {
-      // CSSMediaRule / CSSSupportsRule / CSSLayerBlockRule / CSSContainerRule / CSSScopeRule
-      walk(rule.cssRules, pushCondition(ctx, rule), visit);
-    }
-  }
-}
 ```
 
-#### ハマりどころ 3 点
+panel、clipboard、将来のCLI/MCPは同じobservationを使う。
 
-1. **cross-origin stylesheet**: `sheet.cssRules` は cross-origin だと `SecurityError` を投げる。Google Fonts などが該当。走査全体を `try/catch` で囲み、読めないシートはスキップする。索引は「読めなかったシート」を保持し続ける（黙って捨てない）が、**パネルには出さない**（§5）。実態としてほぼ常に Web フォントであり、要素ごとに出しても情報量がゼロだったため
-2. **ネスト時の `&`**: ネストされたルールの `selectorText` は `& .title` のように相対セレクタで返る。そのまま `el.matches()` に渡すと例外になる。親セレクタに置換してから照合する
-3. **`:has()` / `:is()` / `:where()`**: `el.matches()` は正しく評価するが、詳細度計算は別途対応が必要（`:where()` は 0、`:is()` は引数中の最大値）
-4. **ネストした at-rule 直下の宣言**: `.card { gap: 1rem; @media (…) { gap: 2rem } }` の内側の宣言は、`selectorText` を持たない `CSSNestedDeclarations` として現れる。`selectorText` の有無でルールを判定していると丸ごと落ちる。セレクタは親（解決済み）をそのまま使うこと——ここで `resolveNesting` に通すと `.card .card` になって二度と一致しない
+### 12.2 Local agent pull
 
-### 6.4 詳細度とカスケード — 断定しない
+copy + pasteを必須にしないため、将来的に最小のlocal interfaceを追加する。
 
-詳細度計算は自前で実装する必要がある（ブラウザは API を公開していない）。ただし**「勝者を断定する」ことを仕様上の目標にしない**。
-
-理由: `@layer` の順序、`!important`、`revert-layer`、Shadow DOM 境界、`@scope` の近接性まで正確に再現するのは、このツールの価値に対して割に合わない。
-
-**代わりの設計**: 計算値（`getComputedStyle`）が唯一の真実であり、これは常に正しい。ツールは「最有力候補の宣言値 + 計算値」を並べ、候補が複数あるときは件数だけを添える（§F2）。詳細度はソート順のヒントとしてのみ使う。
-
-これなら間違った断定をせずに P1 が解決する。
-
-**詳細度計算は UI から消えても残る。** `+2` の件数表示に詳細度の数値は出さないが、「どれを最有力候補として declared に出すか」の選定に使っているため、[`specificity.ts`](src/core/specificity.ts) は必要。表示を消すこととロジックを消すことを混同しないこと。
-
-### 6.5 距離計測アルゴリズム
-
-```ts
-function measure(a: DOMRect, b: DOMRect) {
-  const horizontal =
-    a.right <= b.left  ? { gap: b.left - a.right, dir: 'right' } :
-    b.right <= a.left  ? { gap: a.left - b.right, dir: 'left'  } :
-    null;   // 水平方向に重なっている
-
-  const vertical =
-    a.bottom <= b.top  ? { gap: b.top - a.bottom, dir: 'down' } :
-    b.bottom <= a.top  ? { gap: a.top - b.bottom, dir: 'up'   } :
-    null;
-
-  if (!horizontal && !vertical) return contains(a, b) ? insets(a, b) : overlap(a, b);
-  return { horizontal, vertical };
-}
+```text
+inspect_current_selection()
+list_css_reviews()
+get_css_review(id)
+verify_css_review(id)
 ```
 
-`getBoundingClientRect()` は `transform` 適用後の値を返す。これは**望ましい**（見えている距離が知りたいので）。ただし transform がかかっている要素では計算値と実測値がずれるため、パネルに `transform 適用中` のバッジを出す。
+ただし最初から汎用review queue、thread、assignment、PR連携は作らない。
 
-### 6.6 要素の取得（ヒットテスト）
+### 12.3 Relation review
 
-外部ライブラリを使わないため、要素の拾い方を自前で決める必要がある。
+複雑なCSS修正をagentへ渡す場合、人間はCSS propertyではなく視覚的関係を指定できるようにする。
 
-```ts
-function pick(x: number, y: number): Element | null {
-  // elementFromPoint ではなく elementsFromPoint を使う。
-  // オーバーレイやツールバー自身を除外するため配列で受ける必要がある。
-  for (const el of document.elementsFromPoint(x, y)) {
-    if (el.hasAttribute('data-caliper')) continue;   // 自前の host / パネル / オーバーレイ
-    if (el.closest('astro-dev-toolbar')) continue;   // toolbar が有効なままの環境向け
-    return el;
-  }
-  return null;
-}
-```
+- 2要素間距離
+- edge alignment
+- width / height
+- containment / overflow
+- human judgment only
 
-- オーバーレイに `pointer-events: none` を付けていれば `elementsFromPoint` の結果にはそもそも入らないが、**保険として除外する**。ここが漏れると自分自身を計測して無限に混乱する
-- **Dev Toolbar App をやめたことで、除外の主経路が `astro-dev-toolbar` から自前 host の `data-caliper` に移る**（§3）。host 要素に必ず `data-caliper` を付けること。Shadow DOM の中身は `elementsFromPoint` では host として 1 つ返るので、host に付いていれば内部は全て弾ける
-- toolbar が有効なままの環境もありうるので、`astro-dev-toolbar` の除外は残す
-- `Alt + ↑ / ↓` での親子移動は、取得した要素を起点に `parentElement` / `firstElementChild` を辿る。移動履歴を保持し、↓ で元の要素に戻れるようにする
+これらはpost-betaであり、現行の選択・panel・editor jumpを置き換えない。
 
-### 6.7 オーバーレイの描画
+### 12.4 Live re-measure
 
-ハイライト矩形・矢印・ガイド線を**単一の SVG レイヤー**に描く。要素ごとに div を作らない（DOM 生成コストと、レイヤー数の増加を避ける）。
+agentの修正後に、同じroute、viewport、targetをbrowserで再解決してgeometryを比較する。
 
-```
-<svg data-caliper style="position:fixed; inset:0; pointer-events:none">
-  <rect  … 基準要素のハイライト />
-  <rect  … hover 要素のハイライト />
-  <line  … 距離の実線（端キャップ付き） />
-  <line stroke-dasharray … 基準要素のエッジから伸ばすガイド線 />
-  <g>    … 数値ラベル（背景矩形 + text） />
-</svg>
-```
+- passはhuman approvalではない
+- observation不能をfailへ潰さない
+- browserがない場合に古い値を返さない
+- locatorがambiguousなら自動選択しない
 
-**ガイド線（破線）が体験の核心**。Figma で距離が直感的に読めるのは、基準要素のエッジを対象要素まで延長した破線があるからで、実線の矢印だけだと「どこからどこまでか」が読み取れない。分離パターンでは必ず引くこと。
+## 13. UI and accessibility
 
-ラベル配置のルール:
+### 13.1 Visual hierarchy
 
-- gap が十分広ければ矢印の中央に置く
-- gap がラベル幅より狭ければ、矢印の外側（延長線上）に逃がす
-- ビューポート端で反転させる
+対象pageの視覚評価を妨げないよう、UIは無彩色中心、計測だけ青を使う。
 
-座標系は `position: fixed` + `getBoundingClientRect()` のビューポート座標で統一する。`pageX` 系と混ぜないこと（スクロール時にずれる）。
+- panel background: `#F2F2F2` 90% + blur
+- primary text: `#000000`
+- secondary text: `#4D4D4D`
+- tertiary text / borders: `#808080` / `#B3B3B3`
+- measurement / source link: `#0000FF`
+- panel radius: `16px`
+- spacing unit: `4px`
+- number: `font-variant-numeric: tabular-nums`
 
-### 6.8 rect の無効化
+### 13.2 Interaction quality
 
-計測中に対象がずれると数値が嘘になる。以下で再計算する。
+- panel headerはdrag可能
+- drag後は自動配置を停止
+- panelを閉じたらpin位置をreset
+- source linkはkeyboard focus可能
+- hoverだけに依存するactionを置かない
+- linkは色だけでなくhover/focusでunderline
+- hidden UIをtab orderから外す
+- `prefers-reduced-motion`を尊重
+- icon-only buttonには`aria-label`
 
-- `scroll`（capture: true, passive: true）— 内側のスクロールコンテナも拾うため capture が必要
-- `resize`
-- 選択要素への `ResizeObserver`
+### 13.3 Non-interference
 
-ただし**再計算は rAF 内で 1 回だけ**。scroll イベントごとに `getBoundingClientRect()` を呼ぶと強制同期レイアウトが連発する。
+- overlayは常に`pointer-events: none`
+- page本来のcopy shortcutを奪わない
+- global `Cmd/Ctrl + C`を使わない
+- page clickを不要にconsumeしない
+- animationはtransformとopacityだけ
+- UI textは`user-select: none`、source value等必要箇所は例外可
 
-### 6.9 エディタジャンプ
+## 14. Performance and reliability
 
-`launch-editor-middleware` を Astro integration の `astro:server:setup` フックで登録する。
+- hover中60fpsを目標
+- pointermoveでは座標だけ更新
+- DOM readとUI writeをrAF内で分離
+- stylesheet indexをcache
+- source line mapをhoverごとにfetchしない
+- `getComputedStyle()`呼出しをtarget変更時へ抑える
+- HMRでstylesheet index、inherit cache、CSS mapを無効化
+- scrollとresizeを1frameへ集約
+- disconnected nodeを測定しない
+- transform chainでは不正確なgeometryを出さない
+- production non-inclusionをcompat testで保証
 
-```ts
-// integration
-'astro:server:setup': ({ server }) => {
-  server.middlewares.use('/__caliper/open-in-editor', launchEditorMiddleware());
-}
-// client
-fetch(`/__caliper/open-in-editor?file=${encodeURIComponent(file)}`);
-```
+## 15. Security and privacy
 
-**行番号について**:
+- dev command以外ではclientとendpointを有効化しない
+- source fileの任意read endpointを作らない
+- editor jumpはproject root内だけ
+- selectorとsource labelは`textContent`で描画
+- DOM subtree、input value、cookie、localStorageをcopyしない
+- 外部serviceへ自動送信しない
+- screenshotを収集しない
+- API keyを要求しない
+- production buildへagent contextを含めない
 
-CSSOM は**ルールの行番号を持たない**。`file:line` でジャンプするには追加の仕組みが要る。
+## 16. Testing strategy
 
-Vite plugin の `transform` フックで CSS を PostCSS でパースし、`selectorText → 行番号` のマップを作って `/__caliper/css-map` で配る（M6・実装済み）。マップが引ければ `file:line`、引けなければファイル先頭へ落とす。
+### 16.1 Existing beta checks
 
-**セレクタのコピーボタンは置かない。** 行が引けるならジャンプで足り、引けない場合もセレクタはブロック右上に表示されているので読んで打てる。ボタンを置く価値がない（§2）。
+- TypeScript strict typecheck
+- core / uiからAstroへのdependency boundary
+- cascade ordering
+- nested selector handling
+- separated / contained geometry
+- npm tarballによるcompat fixture
+- production buildへのclient非混入
+- dev script injection
+- CSS map endpoint
+- Astro 5 / 6 / 7
 
----
+### 16.2 Add before public beta
 
-## 7. パフォーマンス要件
+- source linkのproject root制約
+- competing candidateの各source jump
+- HMR後のpanel再計算
+- selected node disconnect時の安全な解除
+- cross-origin stylesheetが全体を壊さないこと
+- native nestingとnested at-ruleのline mapping
+- clipboardからsensitive dataを除外
+- package tarballの内容
 
-`pointermove` 駆動なので、ここを外すとツール自体がガタつく。
+### 16.3 Content fixtures
 
-- **rAF にコミットする**。`pointermove` ハンドラでは座標を ref に保持するだけにし、DOM 更新は `requestAnimationFrame` 内で 1 回だけ行う
-- **オーバーレイの移動は `transform` と `opacity` のみ**。`top` / `left` / `width` / `height` をアニメーションしない（layout → paint → composite の全段が毎フレーム走る）
-- **CSS 変数を親に毎フレーム設定しない**。全子要素のスタイル再計算が走る。対象要素の `transform` を直接更新する
-- **ルール索引はキャッシュする**。`document.styleSheets` の全走査は hover ごとにやらない。初回に索引を構築し、HMR イベント（`import.meta.hot`）で無効化して再構築する
-- `getComputedStyle()` は強制同期レイアウトを起こす。**読み取りを全部済ませてから書き込む**（read / write を混ぜない）
+playgroundはcomponent showcaseではなく、実サイトに近いCSS条件を持つ。
 
-### 目標
+- 可変長headline
+- prose、画像、caption
+- card grid
+- nested layout
+- global + scoped style
+- native CSS nesting
+- responsive typography
+- margin collapse
+- `clamp()`、`minmax()`、aspect ratio
+- CMS相当の短文 / 長文切替
 
-hover 移動中に 60fps を維持すること。維持できないなら、それは計測ツールとして失格（測っている対象の挙動を変えてしまう）。
+## 17. Implementation plan
 
----
+現在の`src/`はprototypeではなく、完成系の中核である。大規模なagent bridgeへ進む前に、既存インスペクターを公開する。
 
-## 8. 正しさの床
+### B0 — Public beta hardening
 
-`web-craft-floor` 由来。違反はバグとして扱う。
+目的: 現行機能を人間が日常利用できる品質で公開する。
 
-- 装飾オーバーレイに `pointer-events: none`（イベントを奪わない）
-- インタラクティブ要素の内部テキストに `user-select: none`
-- 更新される数値に `font-variant-numeric: tabular-nums`
-- アイコンのみのボタンに `aria-label`
-- `prefers-reduced-motion: reduce` でパネルの遷移をクロスフェードに置換
-- hover 演出は `@media (hover: hover) and (pointer: fine)` で囲う
-- `transform` / `opacity` 以外をアニメーションしない
-- **明色パネルのコントラスト**: `#808080` on `#F2F2F2` は 3.5:1 程度しかない。12px の文字に使う以上、セレクタ・件数バッジのような**補助情報にのみ**使い、値やラベルには使わない
-- **`#0000FF` のリンクは色だけで示さない**。hover / focus で下線を出し、キーボードフォーカスの輪郭を必ず持つ
+- package name衝突の解消
+- beta version、LICENSE、prepack、publishConfig
+- READMEを`Understand → Fix yourself → Delegate`へ改稿
+- source jumpのpath validation
+- source linkへ解決済みline numberを表示
+- package tarball検証
+- Astro 5 / 6 / 7 compatをCI相当で固定
+- editor未検出時のerror message改善
+- current testsの不足を補う
 
----
+完了条件:
 
-## 9. 実装フェーズ
+- clean installから要素選択、source jump、編集、HMR確認まで完走
+- `pnpm check`と`pnpm check:compat`が成功
+- `npm publish --dry-run --tag beta`が成功
+- production buildへ何も混入しない
 
-| Phase | 内容 | 目安 | 完了条件 | 状態 |
-| --- | --- | --- | --- | --- |
-| **M1** | Integration + 器。SVG オーバーレイ + ヒットテスト + hover ハイライト | 半日 | ページに影響を与えずオーバーレイが出る | 済 |
-| **M2** | 距離計測（ピン留め、分離 / 内包 / 交差、ガイド線、ラベル配置） | 半日 | **P2 の半分が解決し、日常的に使える状態になる** | 済 |
-| **M3** | `data-vite-dev-id` からのルール解決。出自ファイル名の表示 | 半日 | **P1 が解決する。ここが本命** | 済 |
-| **M4** | 宣言値 / 計算値 / 実測値の 3 列表示 | 半日 | P2 が完全に解決する | 済 |
-| **M5** | エディタジャンプ | 2 時間 | 出自から直接コードへ飛べる | 済 |
-| **M6** | PostCSS による行番号マップ | 1 日 | `file:line` でジャンプできる | 済 |
-| **M7** | **パネル再設計 + Dev Toolbar App からの離脱** | 1 日 | 下記 4 条件 | — |
-| **M8** | **Copy for agent** | 2 時間 | §F5 の診断コンテキストを明示操作でコピーし、エージェントへそのまま渡せる | 済 |
+### B1 — Human workflow refinement
 
-**M2 を先に置いた理由**は 2 つ。まず、距離計測は自己完結していて外部依存がなく、`elementsFromPoint` → rAF → SVG 更新という**この後の全機能が乗る土台**を先に検証できる。次に、M2 だけで毎日使えるツールになるため、M3 以降の設計を「実際に使いながら」決められる。
+目的: agentへ頼まず自分で直す流れをさらに短くする。
 
-### M7 の完了条件
+- HMR後の選択維持を改善
+- source候補の表示順とrelevanceをdogfoodで調整
+- source jump成功 / 失敗feedback
+- panelから修正前後の値を追いやすくする
+- keyboardだけでsourceへ移動可能にする
 
-実際に使った結果、パネルが「読む対象」ではなく「確かめる対象」であることが分かったので、それに合わせて削る。
+完了条件:
 
-1. **Dev Toolbar を無効化した状態で起動できる**（ショートカット + 自前 ShadowRoot + ON インジケータ。§3 / §6.1）
-2. **パネルが §F2 の形になっている**（ブロック単位・常時 3 行・宣言があるものだけ・`+2` バッジ・継承の遡り）
-3. **削除が完了している**: `var()` 展開 / rem・vw 逆算 / マッチルール一覧 / 詳細度と `@layer` の表示 / 汎用的な `open`・`copy`・`copy all` ボタン / レイアウト系トグル。§F5 の用途を限定した `Copy for agent` は残す
-4. **パネルの出方が §F4 の「探すことと読むことを分ける」になっている**（既定非表示・選択で開く・減光・パネル外クリックで閉じる）
+- 小さなCSS修正でpromptやcopyを使わず完了できる
+- HMR後に対象と変更結果を見失いにくい
 
-M7 は**足す作業ではなく削る作業**である。3 番目が終わっていないなら完了していない。
+### B2 — Structured observation
 
-### 参考実装
+目的: 人間向け表示とagent handoffのデータを共通化する。
 
-SpacingJS（MIT, 約 300 行）は距離計測部分の**依存としてではなく読み物として**有用。特にラベルの衝突回避と、要素が入れ子になっている場合の扱いは実装済みの解が読める。ただしオーバーレイを div で構築しているため、§6.7 の SVG 単一レイヤー方針とは異なる。
+- versioned `InspectorObservation`
+- current metricsからJSON serializer
+- panelとclipboardを同じmodelから生成
+- sensitive field exclusion
+- plain text formatterをmodelのconsumerへ変更
 
----
+完了条件:
 
-## 10. リスクと既知の制約
+- DOM class instanceを含まないJSONを生成できる
+- 現行`Copy for agent`の情報量を後退させない
 
-| リスク | 影響 | 対処 |
-| --- | --- | --- |
-| オーバーレイ自身を計測してしまう | 数値が意味不明になる | §6.6 の除外を二重にかける（`pointer-events: none` + 属性チェック） |
-| cross-origin stylesheet を読めない | 外部 CSS の出自が出ない | 索引側では捨てずに保持する。ただしパネルには出さない（§6.3）。出すならインジケータ側 |
-| ネスト時の `&` 解決漏れ | ルールを取りこぼす | ネスト CSS を含むテストページを用意して回帰確認 |
-| 詳細度計算の不正確さ | 誤った候補を declared に出し、**編集しても変わらないファイルへ誘導する** | §6.4 の通り断定しない。加えて候補が複数あるときは `+2` で件数を出し、信じてよい行かどうかを示す（§F2） |
-| HMR 後に索引が古くなる | 編集後に古い出自が出る | `import.meta.hot` で索引を無効化 |
-| 自前 host がページの CSS に拾われる | `body > *:last-child` などが誤爆する | host を `documentElement` 直下に置く（§5）。それでも `html > *` を使うページには影響しうるので playground で確認 |
-| 起動ショートカットがページ側と衝突 | 起動できない / ページの機能が壊れる | 統合オプションで差し替え可能にする（§5） |
-| ON なのに気づかず操作する | `Alt + Click` がページのリンクを踏まなくなる | 常駐インジケータで ON を可視化（§F4） |
-| コピー内容が候補を勝者として伝える | エージェントが誤ったファイルを編集する | §F5 の通り常に `declared candidate` と表記し、競合候補数も含める |
-| コピー操作がページの機能を奪う | 通常のテキストコピーができなくなる | 専用ボタンの明示操作だけに限定し、グローバルな `Cmd/Ctrl + C` を使わない |
-| Astro の `injectScript` API の変更 | 動かなくなる | Astro のメジャー版を pin。API 面積を薄く保つ |
-| CSSOM が行番号を持たない | 正確なジャンプ不可 | M6 の行番号マップで解決。引けなければファイル先頭 |
+### B3 — Optional agent pull
 
----
+目的: 複雑な修正だけcopy + pasteなしでagentへ渡す。
 
-## 11. ファイル構成
+- current selectionのlocal session
+- minimal CLI
+- optional STDIO MCP adapter
+- source / observation read tools
+- agent vendorに依存しないschema
 
-```
-astro-caliper/
-├─ package.json            … peerDependencies: astro ^5–7, vite ^6–8（§10 参照）
-├─ src/
-│  ├─ index.ts              … Astro Integration（config:setup / server:setup）  ★Astro依存
-│  ├─ app.ts                … boot。host + ShadowRoot を作り、ショートカットを待ち受ける  ★Astro依存
-│  ├─ core/                 … ここから下は DOM + CSSOM のみ。astro を import しない
-│  │  ├─ stylesheet-index.ts  … styleSheets 走査・索引・HMR 無効化
-│  │  ├─ resolve-source.ts    … sheet → ファイルパス。差し替え点（§3）
-│  │  ├─ rule-matcher.ts      … el → Matched[]
-│  │  ├─ specificity.ts       … 詳細度計算（候補の選定用。UI には出さない。§6.4）
-│  │  ├─ hit-test.ts          … elementsFromPoint + 除外
-│  │  ├─ measure.ts           … 距離算出
-│  │  ├─ metrics.ts           … declared / computed / measured の組み立て
-│  │  ├─ inherit.ts           … font-size / line-height の継承元探索（§F2）
-│  │  └─ units.ts             … 数値の整形のみ。rem / vw 逆算は持たない（§2）
-│  ├─ ui/                   … 描画先の ShadowRoot を引数で受け取る。自分で探さない
-│  │  ├─ overlay.ts           … ハイライト・矢印・ガイド線・ラベル（単一 SVG）
-│  │  ├─ panel.ts             … 出自パネル
-│  │  ├─ indicator.ts         … ON であることの常駐表示（§F4）
-│  │  └─ styles.ts            … トークンと CSS。文字列で持つ（Vite に拾わせないため）
-│  └─ server/
-│     └─ open-in-editor.ts    … launch-editor middleware
-└─ playground/               … ネスト CSS・scoped style・clamp を含む検証ページ
-```
+完了条件:
 
-**★印の 2 ファイル以外に `astro` を import しないこと。** これが §3 で述べた境界の実体で、守れているかは `grep -r "from 'astro" src/core src/ui` が空になるかで機械的に検証できる。CI に入れてもいい。
+- インスペクター単体のinstall / startup pathへ影響しない
+- agentが現在選択中の要素とCSS根拠をpullできる
 
-`playground/` を最初に作ること。「壊れやすい CSS の見本市」がないと、ルール解決の取りこぼしに気づけない。
+### B4 — Relation review and verification
 
----
+目的: 人間が複雑な見た目の期待をagentへ渡し、修正後に再計測する。
 
-## 12. 未決事項 — 判断が必要
+- 2-target固定selection
+- distance / alignment / size / overflow expectation
+- locator再解決
+- live browser measurement
+- human approvalとの分離
 
-### 決着した項目（M7 で確定）
+完了条件:
 
-| 項目 | 決定 |
+- agentの修正後に同じ視覚的関係を再計測できる
+- current inspectorとself-fix workflowを複雑化しない
+
+## 18. Beta acceptance scenarios
+
+### Scenario A — Human fixes a simple spacing issue
+
+1. agentが実装したarticle pageを開く
+2. 人間が余白に違和感のあるheadingを選択
+3. panelで`margin-bottom`候補、computed、measuredを確認
+4. `.astro:line`をclickしてeditorを開く
+5. 人間が1行修正する
+6. HMR後の実画面とpanelで結果を確認する
+7. agentへのpromptは不要
+
+### Scenario B — Human discovers the real cause
+
+1. card間隔が広すぎる画面を選択
+2. card自身のmarginではなくparentの`gap`がsourceとして表示される
+3. computed `32px`とmeasured `48px`の差を見る
+4. competing layout declarationを展開する
+5. 正しいsourceへ移動して修正する
+
+### Scenario C — Human delegates a complex fix
+
+1. mobileでhero layoutが崩れる
+2. 人間がtargetを選択し`Copy for agent`を実行
+3. agentがelement、viewport、source、candidate、geometryを受け取る
+4. 複数breakpointと親layoutを修正する
+5. 人間がbrowserで最終確認する
+
+### Scenario D — Production remains clean
+
+1. integrationを有効にしたまま`astro build`
+2. production HTML / JSに`astro-caliper/app`がない
+3. editor endpointとCSS map endpointがproductionに存在しない
+
+## 19. Success criteria
+
+betaではtelemetryを送信しない。dogfoodingで次を記録する。
+
+- 選択から正しいsource `file:line`へ到達するまでの時間
+- source候補を取り違えた回数
+- agentへ頼まず完了できたCSS修正の割合
+- DevToolsを開かず完了できたCSS調査の割合
+- `Copy for agent`後に対象説明を追加で書いた回数
+- HMR後に対象や変更結果を見失った回数
+- caliperがpage操作やframe rateを妨げた事例
+
+最初の価値指標はagentによる自動化率ではない。
+
+> AIが書いたCSSを、人間が自分のコードとして理解し直し、適切な方法で修正できたか。
+
+## 20. Competitive boundary
+
+astro-caliperが勝つべき領域:
+
+- Astroの`.astro` scoped CSSへのsource mapping
+- property単位のeditor jump
+- declared candidate / computed / measuredの区別
+- margin、gap、alignment等の実geometry
+- AI実装後に失われた人間の実装理解を取り戻す体験
+- 自分で直す経路とagentへ任せる経路の両立
+- 小さなdev-only integration
+
+競合へ任せる領域:
+
+- 汎用annotationとclient sharing
+- screenshot、console、networkを含むbug report
+- agent内蔵IDE
+- task assignment、thread、PR連携
+- multi-framework runtime inspection
+- cloud verification
+
+## 21. Decisions and deferred work
+
+### Decided
+
+| Topic | Decision |
 | --- | --- |
-| パネルのフォントとサイズ | Inter / 14px・12px / line-height 1.2（§5） |
-| パネルの配色 | 明色。`#F2F2F2` 90% + blur、テキストは `#000000` / `#4D4D4D` / `#808080`、罫 `#B3B3B3`、リンク `#0000FF`（§5） |
-| オーバーレイの配色 | `#0000FF` 主体、選択は `#000000`（§5） |
-| 選択と hover の区別 | 色ではなく線種（選択は実線 / hover 破線）（§5） |
-| 表示するプロパティのセット | 宣言があるものだけ。ショートハンドは longhand へ割り当て（§F2） |
-| 器 | Dev Toolbar App をやめて自前 ShadowRoot + ショートカット（§3） |
+| Product category | AI-written CSSの理解・修正を支援するAstro inspector |
+| Primary workflow | 人間がsourceを理解して自分で直す |
+| Secondary workflow | 複雑な修正をagentへhandoff |
+| Current `src/` | 完成系の中核。置き換えず磨く |
+| Source action | propertyごとの`file:line`を直接開く |
+| Browser editing | 実装しない |
+| Agent transport | betaはclipboard、将来local CLI / MCP |
+| Privacy | local only、外部送信なし |
+| Framework | Astroに集中 |
 
-### 残っている未決
+### Deferred
 
-- **パネルの出現アニメーションの有無と duration / easing**。`transform` / `opacity` のみという制約（§8）の中で決める
-- **矢印・ガイド線の太さ**。1px だと Retina 以外で消え、2px だと計測対象を隠す
-- **起動ショートカットの既定値**。`Ctrl + Shift + C` は DevTools の要素選択と衝突する環境がある。実際に踏んでから決めてよい（差し替え可能にしてあるため詰まない）
-- **インジケータの置き場所**。画面隅は 4 つあるが、パネルが hover 要素を追って動く以上、どこに置いてもいつかは重なる
+- HMR / Astro navigation後のlocator再解決
+- 2要素を固定したrelation inspector
+- local CLI / MCP
+- 数値expectationとlive re-measure
+- 複数viewport review
+- typography assertion
+- screenshot / perceptual diff
+- persistent review file
+- Git diffとの関連付け
+- Vite generalization
+
+これらは、現行インスペクターが人間の理解と自己修正に価値を示した後に判断する。
