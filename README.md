@@ -1,5 +1,11 @@
 # astro-styletrace
 
+[![npm version](https://img.shields.io/npm/v/astro-styletrace?label=npm)](https://www.npmjs.com/package/astro-styletrace)
+[![beta tag](https://img.shields.io/npm/v/astro-styletrace/beta?label=beta)](https://www.npmjs.com/package/astro-styletrace)
+[![license](https://img.shields.io/npm/l/astro-styletrace)](./LICENSE)
+
+First public beta. The API and UI are usable for local Astro development, but may still change before `1.0`.
+
 An Astro integration that shows **where a style came from** and **how far apart two elements are**, without opening DevTools.
 
 Hold `Alt` to measure. `Alt + Click` an element to open a panel that tells you, for every declared property, what the CSS says, what the browser computed, and what the layout actually produced — plus the file it came from, one click away from your editor.
