@@ -1,15 +1,15 @@
-import { lineFor } from '../core/css-map.js';
-import { formatAgentContext } from '../core/agent-context.js';
-import { formatMeasured, type Candidate, type Metric } from '../core/metrics.js';
-import { editorTarget, openInEditor } from '../core/open-in-editor.js';
+import { formatInspectorObservation } from '../core/agent-context.js';
+import type {
+  InspectorObservation,
+  ObservationCandidate,
+  ObservationMetric,
+} from '../core/observation.js';
+import { openInEditor } from '../core/open-in-editor.js';
 import { fmt } from '../core/units.js';
 
 export type PanelContent = {
   selectionKey: string;
-  target: string;
-  rect: DOMRect;
-  metrics: Metric[];
-  transformed: boolean;
+  observation: InspectorObservation;
 };
 
 export type Panel = {
@@ -99,10 +99,7 @@ export function createPanel(root: ShadowRoot): Panel {
     event.stopPropagation();
     if (!last) return;
 
-    const text = formatAgentContext({
-      ...last,
-      viewport: { width: innerWidth, height: innerHeight },
-    });
+    const text = formatInspectorObservation(last.observation);
 
     copy.disabled = true;
     void writeClipboard(text, root).then((ok) => {
@@ -218,16 +215,17 @@ function legacyCopy(text: string, root: ShadowRoot): boolean {
 
 function renderHead(head: HTMLElement, content: PanelContent) {
   head.textContent = '';
+  const observation = content.observation;
 
   const target = document.createElement('div');
   target.className = 'cal-target';
 
   const name = document.createElement('b');
-  name.textContent = content.target;
+  name.textContent = observation.target;
 
   const size = document.createElement('span');
   size.className = 'cal-size';
-  size.textContent = `${fmt(content.rect.width)} × ${fmt(content.rect.height)}`;
+  size.textContent = `${fmt(observation.borderBox.width)} × ${fmt(observation.borderBox.height)}`;
 
   target.append(name, size);
   head.appendChild(target);
@@ -235,7 +233,7 @@ function renderHead(head: HTMLElement, content: PanelContent) {
   const badges = document.createElement('div');
   badges.className = 'cal-badges';
 
-  if (content.transformed) badges.appendChild(badge('transformed', 'warn'));
+  if (observation.transformed) badges.appendChild(badge('transformed', 'warn'));
 
   head.appendChild(badges);
 }
@@ -257,8 +255,9 @@ function renderBody(
   onToggle: (property: string) => void,
 ) {
   body.textContent = '';
+  const observation = content.observation;
 
-  if (content.metrics.length === 0) {
+  if (observation.metrics.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'cal-empty';
     empty.textContent = 'No declarations for this element.';
@@ -267,10 +266,10 @@ function renderBody(
   }
 
   const previousByKey = new Map(
-    (previous?.metrics ?? []).map((metric) => [metricKey(metric), metric]),
+    (previous?.observation.metrics ?? []).map((metric) => [metricKey(metric), metric]),
   );
 
-  for (const metric of content.metrics) {
+  for (const metric of observation.metrics) {
     body.appendChild(
       renderBlock(
         metric,
@@ -284,8 +283,8 @@ function renderBody(
 }
 
 function renderBlock(
-  metric: Metric,
-  previous: Metric | null,
+  metric: ObservationMetric,
+  previous: ObservationMetric | null,
   open: boolean,
   onPrimarySource: (button: HTMLButtonElement) => void,
   onToggle: (property: string) => void,
@@ -305,7 +304,7 @@ function renderBlock(
 }
 
 function renderBlockHead(
-  metric: Metric,
+  metric: ObservationMetric,
   open: boolean,
   onToggle: (property: string) => void,
 ): HTMLElement {
@@ -347,7 +346,7 @@ function renderBlockHead(
   return el;
 }
 
-function renderRows(metric: Metric, previous: Metric | null): HTMLElement {
+function renderRows(metric: ObservationMetric, previous: ObservationMetric | null): HTMLElement {
   const rows = document.createElement('dl');
   rows.className = 'cal-rows';
 
@@ -357,7 +356,7 @@ function renderRows(metric: Metric, previous: Metric | null): HTMLElement {
   rows.append(...row('declared', metric.declared.value, 'declared', via));
   rows.append(...row('computed', metric.computed, 'computed'));
   if (metric.measured !== null) {
-    rows.append(...row('measured', formatMeasured(metric.measured), 'measured'));
+    rows.append(...row('measured', metric.measured.label, 'measured'));
   }
 
   const diffs = diffRows(metric, previous);
@@ -403,33 +402,32 @@ function row(
 }
 
 function renderSource(
-  candidate: Candidate,
+  candidate: ObservationCandidate,
   onPrimarySource?: (button: HTMLButtonElement) => void,
 ): HTMLElement {
-  const file = editorTarget(candidate.source);
+  const label =
+    candidate.source.line === null
+      ? candidate.source.label
+      : `${candidate.source.label}:${candidate.source.line}`;
 
-  if (!file) {
+  if (!candidate.source.target) {
     const el = document.createElement('span');
     el.className = 'cal-source';
     el.dataset.open = 'false';
-    el.textContent = candidate.source.label;
+    el.textContent = label;
     return el;
   }
-
-  const line = lineFor(candidate.source, candidate.selector, candidate.occurrence);
-  const target = line === null ? file : `${file}:${line}`;
-  const label = line === null ? candidate.source.label : `${candidate.source.label}:${line}`;
 
   const el = document.createElement('button');
   el.type = 'button';
   el.className = 'cal-source';
   el.dataset.open = 'true';
-  el.title = `Open ${target} in your editor`;
+  el.title = `Open ${candidate.source.target} in your editor`;
   el.textContent = `${label} ↗`;
   onPrimarySource?.(el);
   el.addEventListener('click', (event) => {
     event.stopPropagation();
-    void openInEditor(target).then((ok) => {
+    void openInEditor(candidate.source.target ?? '').then((ok) => {
       const original = `${label} ↗`;
       el.dataset.state = ok ? 'success' : 'fail';
       el.textContent = ok ? `Opened ${label}` : `Failed ${label}`;
@@ -443,7 +441,7 @@ function renderSource(
   return el;
 }
 
-function renderOthers(others: Candidate[]): HTMLElement {
+function renderOthers(others: ObservationCandidate[]): HTMLElement {
   const list = document.createElement('div');
   list.className = 'cal-others';
 
@@ -467,36 +465,38 @@ function renderOthers(others: Candidate[]): HTMLElement {
   return list;
 }
 
-function metricKey(metric: Metric): string {
+function metricKey(metric: ObservationMetric): string {
   const declared = metric.declared;
-  const line = lineFor(declared.source, declared.selector, declared.occurrence);
   return [
     metric.property,
     declared.property,
     declared.source.label,
-    line ?? '',
+    declared.source.line ?? '',
     declared.selector,
   ].join('\0');
 }
 
-function hasChanged(metric: Metric, previous: Metric | null): boolean {
+function hasChanged(metric: ObservationMetric, previous: ObservationMetric | null): boolean {
   if (!previous) return false;
   return (
     metric.declared.value !== previous.declared.value ||
     metric.computed !== previous.computed ||
-    metric.measured !== previous.measured
+    metric.measured?.value !== previous.measured?.value
   );
 }
 
-function diffRows(metric: Metric, previous: Metric | null): HTMLElement[] {
+function diffRows(
+  metric: ObservationMetric,
+  previous: ObservationMetric | null,
+): HTMLElement[] {
   if (!previous || !hasChanged(metric, previous)) return [];
 
   const out: HTMLElement[] = [];
   addDiff(out, 'declared', previous.declared.value, metric.declared.value);
   addDiff(out, 'computed', previous.computed, metric.computed);
 
-  const previousMeasured = previous.measured === null ? null : formatMeasured(previous.measured);
-  const measured = metric.measured === null ? null : formatMeasured(metric.measured);
+  const previousMeasured = previous.measured?.label ?? null;
+  const measured = metric.measured?.label ?? null;
   addDiff(out, 'measured', previousMeasured, measured);
 
   return out;

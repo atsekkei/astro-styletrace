@@ -3,6 +3,8 @@ import { describe, childOf, locatorFor, parentOf, pick, resolveLocator } from '.
 import { matchCached, resetInheritCache } from './inherit.js';
 import { measure, type MeasureResult } from './measure.js';
 import { buildMetrics, hasTransformedChain } from './metrics.js';
+import { createInspectorObservation } from './observation.js';
+import { editorTarget } from './open-in-editor.js';
 import { invalidateStyleIndex } from './stylesheet-index.js';
 import { createOverlay, type BoxModel, type Overlay } from '../ui/overlay.js';
 import { createPanel, type Panel } from '../ui/panel.js';
@@ -88,12 +90,17 @@ export function createInspector(canvas: ShadowRoot): Inspector {
         selectionDirty = false;
         const computed = getComputedStyle(selected);
         const match = matchCached(selected);
+        const metrics = buildMetrics(selected, selectedRect, computed, match.rules);
         panel.update({
           selectionKey,
-          target: describe(selected),
-          rect: selectedRect,
-          metrics: buildMetrics(selected, selectedRect, computed, match.rules),
-          transformed: hasTransformedChain(selected),
+          observation: createInspectorObservation({
+            target: describe(selected),
+            rect: selectedRect,
+            viewport: { width: innerWidth, height: innerHeight },
+            metrics,
+            transformed: hasTransformedChain(selected),
+            sourceTarget: editorTarget,
+          }),
         });
       }
 

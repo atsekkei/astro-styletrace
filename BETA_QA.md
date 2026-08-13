@@ -28,6 +28,7 @@ Run these checks before publishing a beta build.
 3. Click `Copy for agent`.
 4. Confirm the copied text includes element, viewport, source, selector, declared candidate, computed value, measured value, and competing candidate count.
 5. Confirm the copied text does not include DOM subtree content, input values, cookies, localStorage, API tokens, or a home directory path.
+6. Confirm the serialized observation JSON contains `version`, plain numbers/strings/booleans, and no DOM class instances or editor open targets.
 
 ## Scenario D: Production remains clean
 

@@ -1,31 +1,23 @@
-import { lineFor } from './css-map.js';
-import { formatMeasured, type Metric } from './metrics.js';
+import type { InspectorObservation } from './observation.js';
 import { fmt } from './units.js';
 
-export type AgentContext = {
-  target: string;
-  rect: Pick<DOMRect, 'width' | 'height'>;
-  metrics: Metric[];
-  viewport: {
-    width: number;
-    height: number;
-  };
-};
-
-export function formatAgentContext(context: AgentContext): string {
+export function formatInspectorObservation(observation: InspectorObservation): string {
   const lines = [
     '[astro-styletrace]',
     '',
-    `Element: ${context.target}`,
-    `Border box: ${fmt(context.rect.width)} × ${fmt(context.rect.height)}px`,
-    `Viewport: ${fmt(context.viewport.width)} × ${fmt(context.viewport.height)}px`,
+    `Observation version: ${observation.version}`,
+    `Element: ${observation.target}`,
+    `Border box: ${fmt(observation.borderBox.width)} × ${fmt(observation.borderBox.height)}px`,
+    `Viewport: ${fmt(observation.viewport.width)} × ${fmt(observation.viewport.height)}px`,
   ];
 
-  for (const metric of context.metrics) {
+  for (const metric of observation.metrics) {
     const declared = metric.declared;
     const via = declared.property === metric.property ? '' : ` via ${declared.property}`;
-    const line = lineFor(declared.source, declared.selector, declared.occurrence);
-    const source = line === null ? declared.source.label : `${declared.source.label}:${line}`;
+    const source =
+      declared.source.line === null
+        ? declared.source.label
+        : `${declared.source.label}:${declared.source.line}`;
 
     lines.push(
       '',
@@ -35,7 +27,7 @@ export function formatAgentContext(context: AgentContext): string {
     );
 
     if (metric.measured !== null) {
-      lines.push(`- measured: ${formatMeasured(metric.measured)}`);
+      lines.push(`- measured: ${metric.measured.label}`);
     }
 
     lines.push(
@@ -47,3 +39,5 @@ export function formatAgentContext(context: AgentContext): string {
 
   return `${lines.join('\n')}\n`;
 }
+
+export const formatAgentContext = formatInspectorObservation;

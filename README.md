@@ -89,7 +89,7 @@ Click the source file name, or press `Enter`, to open it in your editor at the e
 
 After HMR, styletrace keeps the selected element when the same node survives, and tries to resolve it again by a stable DOM locator when Astro replaces the node. Rows that changed since the previous panel update get a `changed` marker and a compact `before` row for the values that moved.
 
-Click **Copy for agent** to copy the selected element, viewport, declared candidates, computed and measured values, selectors, competing-candidate counts, and `file:line` sources. The copied text labels declarations as candidates because styletrace does not claim to reproduce the complete cascade. Copying is explicit and local; nothing is sent to an external service.
+Click **Copy for agent** to copy the selected element, viewport, declared candidates, computed and measured values, selectors, competing-candidate counts, and `file:line` sources. The copied text is formatted from the same versioned observation model that drives the panel, and labels declarations as candidates because styletrace does not claim to reproduce the complete cascade. Copying is explicit and local; nothing is sent to an external service.
 
 ### What measured means
 
