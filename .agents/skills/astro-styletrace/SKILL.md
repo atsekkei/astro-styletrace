@@ -1,6 +1,6 @@
 ---
 name: astro-styletrace
-description: Use when the user asks to fix, inspect, explain, or delegate styling for an Astro page element selected with astro-styletrace, or mentions .astro-styletrace/handoff.md, .astro-styletrace/current-observation.json, Agent ready, selected browser element, or current styletrace selection.
+description: Use when the user asks to fix, inspect, explain, or delegate styling for an Astro page element selected with astro-styletrace, or mentions .astro-styletrace/handoff.md, .astro-styletrace/current-observation.json, the context dot, selected browser element, or current styletrace selection.
 ---
 
 # astro-styletrace
@@ -17,7 +17,7 @@ Use this skill to consume astro-styletrace handoff files and make targeted CSS f
 6. Preserve unrelated styles, layout structure, and generated Astro attributes.
 7. Run the project checks that are appropriate for the edit.
 
-If the handoff files are missing, ask the user to select the relevant element with astro-styletrace until the panel shows `Agent ready`.
+If the handoff files are missing, ask the user to select the relevant element with astro-styletrace until the panel shows the context dot beside the selected element name.
 
 ## Observation Rules
 

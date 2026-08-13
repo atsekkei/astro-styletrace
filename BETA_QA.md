@@ -9,7 +9,7 @@ Run these checks before publishing a beta build.
 3. Hold `Alt`, click a heading or paragraph with suspicious spacing.
 4. Confirm the panel shows declared candidate, computed value, measured value, and a source `file:line`.
 5. Click the source link and edit one spacing declaration in the editor.
-6. Confirm HMR updates the page and the panel recomputes without using Copy for agent.
+6. Confirm HMR updates the page and the panel recomputes without manual copy/paste.
 7. Confirm changed rows show a `before` value for the edited declaration.
 8. Confirm selection survives HMR when the same DOM locator still exists after replacement.
 
@@ -25,10 +25,9 @@ Run these checks before publishing a beta build.
 
 1. Resize to a narrow mobile viewport.
 2. Select the hero/editorial region.
-3. Click `Copy for agent`.
-4. Confirm the copied text includes element, viewport, source, selector, declared candidate, computed value, measured value, and competing candidate count.
-5. Confirm the copied text does not include DOM subtree content, input values, cookies, localStorage, API tokens, or a home directory path.
-6. Confirm the serialized observation JSON contains `version`, plain numbers/strings/booleans, and no DOM class instances or editor open targets.
+3. Confirm the selected element name has a pulsing context dot.
+4. Confirm `.astro-styletrace/current-observation.json` includes element, viewport, source, selector, declared candidate, computed value, measured value, and competing candidate count.
+5. Confirm the JSON does not include DOM subtree content, input values, cookies, localStorage, API tokens, a home directory path, DOM class instances, or editor open targets.
 
 ## Scenario D: Production remains clean
 
@@ -40,7 +39,7 @@ Run these checks before publishing a beta build.
 ## Scenario E: Agent pulls current selection
 
 1. Start the playground and select an element with styletrace.
-2. Confirm the panel shows `Agent ready · .astro-styletrace/handoff.md`.
+2. Confirm the selected element name has a pulsing context dot.
 3. Confirm `.astro-styletrace/current-observation.json` and `.astro-styletrace/handoff.md` exist in the project root.
 4. Ask a workspace-aware agent to read `.astro-styletrace/handoff.md` and confirm it can find the selected element and source lines without a CLI command.
 5. Run `npx astro-styletrace observation --url http://localhost:4321` and confirm the JSON includes `version`, element, viewport, declared candidates, computed values, measured values, selectors, and source lines.

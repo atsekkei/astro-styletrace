@@ -10,7 +10,7 @@ An Astro integration that shows **where a style came from** and **how far apart 
 
 Hold `Alt` to measure. `Alt + Click` an element to open a panel that tells you, for every declared property, what the CSS says, what the browser computed, and what the layout actually produced — plus the file it came from, one click away from your editor.
 
-Use **Copy for agent** in the panel to copy that diagnosis — including selectors and source lines — as compact text you can paste into your coding agent.
+When an element is selected, styletrace writes local handoff files that workspace-aware agents can read.
 
 Dev only. The integration bails out unless `command === 'dev'`, so nothing reaches a production build.
 
@@ -89,7 +89,7 @@ Click the source file name, or press `Enter`, to open it in your editor at the e
 
 After HMR, styletrace keeps the selected element when the same node survives, and tries to resolve it again by a stable DOM locator when Astro replaces the node. Rows that changed since the previous panel update get a `changed` marker and a compact `before` row for the values that moved.
 
-Click **Copy for agent** to copy the selected element, viewport, declared candidates, computed and measured values, selectors, competing-candidate counts, and `file:line` sources. The copied text is formatted from the same versioned observation model that drives the panel, and labels declarations as candidates because styletrace does not claim to reproduce the complete cascade. Copying is explicit and local; nothing is sent to an external service.
+When the selected element name has a pulsing context dot, the selected element, viewport, declared candidates, computed and measured values, selectors, competing-candidate counts, and `file:line` sources are available in `.astro-styletrace/current-observation.json`. The observation labels declarations as candidates because styletrace does not claim to reproduce the complete cascade. Handoff is local; nothing is sent to an external service.
 
 ### What measured means
 
@@ -134,7 +134,7 @@ Selecting an element writes two local files under the Astro project root:
 - `.astro-styletrace/current-observation.json`
 - `.astro-styletrace/handoff.md`
 
-The panel shows `Agent ready` when those files are prepared. From there you can ask any workspace-aware coding agent to read `.astro-styletrace/handoff.md` and fix the selected styling issue. The JSON uses the same vendor-neutral observation model that drives the panel, without DOM instances, browser storage, or editor open targets.
+The pulsing context dot beside the selected element name means those files are prepared. From there you can ask any workspace-aware coding agent to read `.astro-styletrace/handoff.md` and fix the selected styling issue. The JSON uses the same vendor-neutral observation model that drives the panel, without DOM instances, browser storage, or editor open targets.
 
 CLI and MCP access are still available for agents or scripts that prefer pull-based reads:
 

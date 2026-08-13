@@ -1,4 +1,3 @@
-import { formatInspectorObservation } from '../core/agent-context.js';
 import type {
   InspectorObservation,
   ObservationCandidate,
@@ -33,34 +32,18 @@ export function createPanel(root: ShadowRoot): Panel {
   const body = document.createElement('div');
   body.className = 'cal-body';
 
-  const actions = document.createElement('div');
-  actions.className = 'cal-actions';
-
-  const copy = document.createElement('button');
-  copy.type = 'button';
-  copy.className = 'cal-copy';
-  copy.textContent = 'Copy for agent';
-  actions.appendChild(copy);
-
-  const agent = document.createElement('span');
-  agent.className = 'cal-agent';
-  agent.dataset.state = 'idle';
-  agent.textContent = 'Agent ready · .astro-styletrace/handoff.md';
-  actions.appendChild(agent);
-
   const hint = document.createElement('p');
   hint.className = 'cal-hint';
   hint.textContent =
-    'Alt+Click select · Enter open source · Esc / outside click close · Alt+↑↓ parent/child';
+    'Alt+Click select · Enter source · Esc close';
 
-  el.append(head, body, actions, hint);
+  el.append(head, body, hint);
   root.appendChild(el);
 
   let expanded = new Set<string>();
   let last: PanelContent | null = null;
   let previous: PanelContent | null = null;
   let primarySource: HTMLButtonElement | null = null;
-  let copyReset = 0;
 
   let x = 0;
   let y = 0;
@@ -101,27 +84,6 @@ export function createPanel(root: ShadowRoot): Panel {
     head.addEventListener('pointercancel', onEnd);
   });
 
-  copy.addEventListener('click', (event) => {
-    event.stopPropagation();
-    if (!last) return;
-
-    const text = formatInspectorObservation(last.observation);
-
-    copy.disabled = true;
-    void writeClipboard(text, root).then((ok) => {
-      copy.textContent = ok ? 'Copied' : 'Copy failed';
-      copy.dataset.state = ok ? 'success' : 'fail';
-
-      if (copyReset) clearTimeout(copyReset);
-      copyReset = window.setTimeout(() => {
-        copy.textContent = 'Copy for agent';
-        copy.disabled = false;
-        delete copy.dataset.state;
-        copyReset = 0;
-      }, 1200);
-    });
-  });
-
   function render() {
     if (!last) return;
     primarySource = null;
@@ -146,7 +108,6 @@ export function createPanel(root: ShadowRoot): Panel {
     update(content) {
       previous = last && last.selectionKey === content.selectionKey ? last : null;
       last = content;
-      agent.dataset.state = 'ready';
       expanded = new Set();
       render();
     },
@@ -177,7 +138,6 @@ export function createPanel(root: ShadowRoot): Panel {
     hide() {
       el.setAttribute('data-visible', 'false');
       pinned = false;
-      agent.dataset.state = 'idle';
     },
     dim(on) {
       el.setAttribute('data-dim', String(on));
@@ -188,37 +148,9 @@ export function createPanel(root: ShadowRoot): Panel {
       return true;
     },
     destroy() {
-      if (copyReset) clearTimeout(copyReset);
       el.remove();
     },
   };
-}
-
-async function writeClipboard(text: string, root: ShadowRoot): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return legacyCopy(text, root);
-  }
-}
-
-function legacyCopy(text: string, root: ShadowRoot): boolean {
-  const input = document.createElement('textarea');
-  input.value = text;
-  input.setAttribute('aria-hidden', 'true');
-  input.style.cssText =
-    'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
-  root.appendChild(input);
-  input.select();
-
-  try {
-    return document.execCommand('copy');
-  } catch {
-    return false;
-  } finally {
-    input.remove();
-  }
 }
 
 function renderHead(head: HTMLElement, content: PanelContent) {
@@ -228,6 +160,11 @@ function renderHead(head: HTMLElement, content: PanelContent) {
   const target = document.createElement('div');
   target.className = 'cal-target';
 
+  const ready = document.createElement('span');
+  ready.className = 'cal-agent-dot';
+  ready.title = 'The selected element is available to your agent';
+  ready.setAttribute('aria-label', 'Context ready');
+
   const name = document.createElement('b');
   name.textContent = observation.target;
 
@@ -235,7 +172,7 @@ function renderHead(head: HTMLElement, content: PanelContent) {
   size.className = 'cal-size';
   size.textContent = `${fmt(observation.borderBox.width)} × ${fmt(observation.borderBox.height)}`;
 
-  target.append(name, size);
+  target.append(ready, name, size);
   head.appendChild(target);
 
   const badges = document.createElement('div');

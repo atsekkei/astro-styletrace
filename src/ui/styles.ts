@@ -5,7 +5,7 @@ export const TOKENS = {
   rule: '#D9D9D9',
   accent: '#0000FF',
   warn: '#D40000',
-  surface: '#F2F2F2CC',
+  surface: '#F2F2F2E6',
 
   margin: 'rgba(0, 0, 255, 0.10)',
   padding: 'rgba(0, 0, 255, 0.20)',
@@ -152,8 +152,8 @@ export const CSS = `
 
 .cal-target {
   display: flex;
-  align-items: baseline;
-  gap: ${U * 2}px;
+  align-items: center;
+  gap: ${U * 1}px;
   user-select: none;
 }
 
@@ -360,63 +360,33 @@ export const CSS = `
   text-decoration: underline;
 }
 
-.cal-actions {
+.cal-agent-dot {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: ${U * 2}px;
-  padding: ${U * 3}px ${U * 4}px;
-  border-top: 1px dashed var(--cal-rule);
-  background: var(--cal-surface);
+  width: ${U * 1.5}px;
+  height: ${U * 1.5}px;
+  border-radius: 50%;
+  background: var(--cal-accent);
+  transform: scale(1);
+  transform-origin: center;
+  animation: cal-agent-pulse 1.6s ease-in-out infinite;
 }
 
-.cal-copy {
-  width: 112px;
-  padding: ${U * 1.5}px ${U * 2}px;
-  border: 1px solid var(--cal-rule);
-  border-radius: ${U}px;
-  background: transparent;
-  color: var(--cal-ink-2);
-  font: inherit;
-  font-size: var(--cal-size-s);
-  line-height: 1.2;
-  cursor: pointer;
+@keyframes cal-agent-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-.cal-copy:hover {
-  border-color: var(--cal-accent);
-  color: var(--cal-accent);
-}
-
-.cal-copy:focus-visible {
-  outline: 2px solid var(--cal-accent);
-  outline-offset: 2px;
-}
-
-.cal-copy:disabled {
-  cursor: default;
-}
-
-.cal-copy[data-state="success"] {
-  border-color: var(--cal-accent);
-  color: var(--cal-accent);
-}
-
-.cal-copy[data-state="fail"] {
-  color: var(--cal-ink-3);
-}
-
-.cal-agent {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--cal-accent);
-  font-size: var(--cal-size-s);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.cal-agent[data-state="idle"] {
-  display: none;
+@media (prefers-reduced-motion: reduce) {
+  .cal-agent-dot {
+    animation: none;
+  }
 }
 
 .cal-others {
