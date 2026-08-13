@@ -23,7 +23,7 @@ export type Panel = {
 export function createPanel(root: ShadowRoot): Panel {
   const el = document.createElement('div');
   el.className = 'cal-panel';
-  el.setAttribute('data-caliper', 'panel');
+  el.setAttribute('data-styletrace', 'panel');
   el.setAttribute('data-visible', 'false');
 
   const head = document.createElement('div');

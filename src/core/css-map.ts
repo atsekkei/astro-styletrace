@@ -2,7 +2,7 @@ import type { Source } from './resolve-source.js';
 
 export type CssMap = Record<string, Record<string, number[]>>;
 
-const ENDPOINT = '/__caliper/css-map';
+const ENDPOINT = '/__styletrace/css-map';
 
 let map: CssMap = {};
 

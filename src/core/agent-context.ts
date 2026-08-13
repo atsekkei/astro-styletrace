@@ -14,7 +14,7 @@ export type AgentContext = {
 
 export function formatAgentContext(context: AgentContext): string {
   const lines = [
-    '[astro-caliper]',
+    '[astro-styletrace]',
     '',
     `Element: ${context.target}`,
     `Border box: ${fmt(context.rect.width)} × ${fmt(context.rect.height)}px`,

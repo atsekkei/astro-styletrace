@@ -18,7 +18,7 @@ export function createCssMapStore(): CssMapStore {
   return {
     plugin() {
       return {
-        name: 'astro-caliper:css-map',
+        name: 'astro-styletrace:css-map',
         enforce: 'pre',
         apply: 'serve',
         transform(code, id) {

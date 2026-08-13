@@ -1,7 +1,7 @@
 import { createInspector } from './core/inspector.js';
 import { createIndicator } from './ui/indicator.js';
 
-export type CaliperOptions = {
+export type StyletraceOptions = {
   shortcut?: string;
 };
 
@@ -19,14 +19,14 @@ type Combo = {
   alt: boolean;
 };
 
-export default function boot(options: CaliperOptions = {}): void {
+export default function boot(options: StyletraceOptions = {}): void {
   if (typeof document === 'undefined') return;
 
   const shortcut = options.shortcut ?? DEFAULT_SHORTCUT;
   const combo = parseShortcut(shortcut);
 
   const host = document.createElement('div');
-  host.setAttribute('data-caliper', 'host');
+  host.setAttribute('data-styletrace', 'host');
   host.style.cssText =
     'position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;color-scheme:light;';
   document.documentElement.appendChild(host);

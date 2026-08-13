@@ -1,5 +1,5 @@
 {
-  "name": "astro-caliper",
+  "name": "astro-styletrace",
   "version": "0.1.0",
   "type": "module",
   "description": "Astro integration that shows where a style came from and how far apart elements are, without opening DevTools",

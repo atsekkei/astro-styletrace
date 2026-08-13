@@ -41,7 +41,7 @@ export type Overlay = {
 export function createOverlay(root: ShadowRoot): Overlay {
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('class', 'cal-svg');
-  svg.setAttribute('data-caliper', 'overlay');
+  svg.setAttribute('data-styletrace', 'overlay');
   svg.setAttribute('aria-hidden', 'true');
 
   const boxLayer = layer(svg);

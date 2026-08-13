@@ -33,7 +33,7 @@ importers:
       astro:
         specifier: ^5.13.0
         version: 5.18.2(@types/node@26.2.0)(rollup@4.62.4)(typescript@5.9.3)
-      astro-caliper:
+      astro-styletrace:
         specifier: workspace:*
         version: link:..
 

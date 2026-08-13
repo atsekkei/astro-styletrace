@@ -52,7 +52,7 @@ export function buildStyleIndex(): StyleIndex {
     const source = resolveSource(sheet as CSSStyleSheet);
 
     const owner = sheet.ownerNode as HTMLElement | null;
-    if (owner?.hasAttribute?.('data-caliper')) continue;
+    if (owner?.hasAttribute?.('data-styletrace')) continue;
 
     let list: CSSRuleList;
     try {

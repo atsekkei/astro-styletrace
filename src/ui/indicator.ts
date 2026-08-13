@@ -7,12 +7,12 @@ export type Indicator = {
 export function createIndicator(root: ShadowRoot, shortcut: string): Indicator {
   const el = document.createElement('div');
   el.className = 'cal-indicator';
-  el.setAttribute('data-caliper', 'indicator');
+  el.setAttribute('data-styletrace', 'indicator');
   el.setAttribute('data-visible', 'false');
   el.setAttribute('aria-hidden', 'true');
 
   const name = document.createElement('b');
-  name.textContent = 'caliper';
+  name.textContent = 'styletrace';
 
   const hint = document.createElement('span');
   hint.textContent = shortcut;

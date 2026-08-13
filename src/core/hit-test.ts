@@ -1,21 +1,21 @@
 export function pick(x: number, y: number): Element | null {
   for (const el of document.elementsFromPoint(x, y)) {
-    if (isCaliper(el)) continue;
+    if (isStyletrace(el)) continue;
     return el;
   }
   return null;
 }
 
-function isCaliper(el: Element): boolean {
-  if (el.hasAttribute('data-caliper')) return true;
-  if (el.closest('[data-caliper]')) return true;
+function isStyletrace(el: Element): boolean {
+  if (el.hasAttribute('data-styletrace')) return true;
+  if (el.closest('[data-styletrace]')) return true;
   if (el.closest('astro-dev-toolbar')) return true;
   return false;
 }
 
 export function parentOf(el: Element): Element | null {
   const parent = el.parentElement;
-  if (!parent || isCaliper(parent)) return null;
+  if (!parent || isStyletrace(parent)) return null;
   return parent;
 }
 
@@ -23,7 +23,7 @@ export function childOf(el: Element, x: number, y: number): Element | null {
   let fallback: Element | null = null;
 
   for (const child of Array.from(el.children)) {
-    if (isCaliper(child)) continue;
+    if (isStyletrace(child)) continue;
     if (!fallback) fallback = child;
 
     const rect = child.getBoundingClientRect();

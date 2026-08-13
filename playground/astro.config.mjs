@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import caliper from 'astro-caliper';
+import styletrace from 'astro-styletrace';
 
 export default defineConfig({
-  integrations: [caliper()],
+  integrations: [styletrace()],
 });

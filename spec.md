@@ -1,4 +1,4 @@
-# astro-caliper — CSS inspection and review specification
+# astro-styletrace — CSS inspection and review specification
 
 Status: draft
 
@@ -8,17 +8,17 @@ Last updated: 2026-08-13
 
 ## 1. Product definition
 
-astro-caliper は、AI coding agent が実装した Astro サイトの CSS について、人間が**どこに書かれ、ブラウザ上でどう効いているか**を理解し、自分で直すか agent へ任せるかを選べるローカル開発ツールである。
+astro-styletrace は、AI coding agent が実装した Astro サイトの CSS について、人間が**どこに書かれ、ブラウザ上でどう効いているか**を理解し、自分で直すか agent へ任せるかを選べるローカル開発ツールである。
 
 短い定義:
 
-> AI が書いた CSS を、人間が理解して直すためのノギス。
+> AI が書いた CSS の出どころと作用を、人間が追跡して直すための道具。
 
 英語での位置付け:
 
 > Understand and review AI-written CSS in Astro.
 
-astro-caliper の中心は、agent に作業を送る機能ではない。中心にあるのは、実際のコンテンツが入ったブラウザで要素を選び、次を一度に確認できるインスペクターである。
+astro-styletrace の中心は、agent に作業を送る機能ではない。中心にあるのは、実際のコンテンツが入ったブラウザで要素を選び、次を一度に確認できるインスペクターである。
 
 ```text
 どの要素を見ているか
@@ -56,7 +56,7 @@ AI agent へコーディングを依頼すると、コードを短時間で生�
 
 手書きで実装した場合、人間はファイル構成や selector を作業の記憶として持っている。agent が実装すると、その暗黙知が形成されない。コードは存在するが、人間が所有できていない状態になる。
 
-astro-caliper の第一の仕事は、**AIが書いたCSSの所在と作用を人間が取り戻すこと**である。
+astro-styletrace の第一の仕事は、**AIが書いたCSSの所在と作用を人間が取り戻すこと**である。
 
 ### 2.2 CSS cannot be fully constrained by documentation
 
@@ -86,13 +86,13 @@ CSS修正の多くは、原因箇所さえ分かれば小さい。
 
 このような修正で、agentへ状況を説明し、応答を待ち、差分をレビューする方が時間がかかることがある。
 
-したがって astro-caliper は、人間を常にagentへ誘導しない。**人間が自分で直す経路を最短にし、複雑な場合だけagentへ委譲できる**ことを重要な設計原則とする。
+したがって astro-styletrace は、人間を常にagentへ誘導しない。**人間が自分で直す経路を最短にし、複雑な場合だけagentへ委譲できる**ことを重要な設計原則とする。
 
 ### 2.4 Review should not change the viewport
 
 通常のDevToolsをdockしてCSSを調べると、pageのviewportが狭くなり、調べる前と異なるbreakpointや折返しへ変わることがある。undockすれば回避できるが、pageとDevToolsの往復が増える。
 
-astro-caliperはpage内の小さなoverlayとして動作し、layout flowへ参加しない。人間はレビュー対象のviewportを保ったまま、sourceとgeometryを確認できる。
+astro-styletraceはpage内の小さなoverlayとして動作し、layout flowへ参加しない。人間はレビュー対象のviewportを保ったまま、sourceとgeometryを確認できる。
 
 ## 3. Why content-first websites and Astro
 
@@ -114,7 +114,7 @@ astro-caliperはpage内の小さなoverlayとして動作し、layout flowへ参
 
 ### 3.2 Why Astro
 
-Astro はコンテンツ中心のWebサイトに適しており、astro-caliper が対象とするCSSの複雑さが現れやすい。
+Astro はコンテンツ中心のWebサイトに適しており、astro-styletrace が対象とするCSSの複雑さが現れやすい。
 
 - `.astro` componentとscoped style
 - global stylesheetとlayout component
@@ -241,26 +241,26 @@ betaの人間向け体験を壊さない順序で追加する。
 ### 7.1 Setup
 
 ```bash
-npm install -D <published-package-name>
+npm install -D astro-styletrace
 ```
 
 ```js
 // astro.config.mjs
 import { defineConfig } from 'astro/config';
-import caliper from '<published-package-name>';
+import styletrace from 'astro-styletrace';
 
 export default defineConfig({
-  integrations: [caliper()],
+  integrations: [styletrace()],
 });
 ```
 
-パッケージ公開名は別release taskで確定する。本仕様では製品名を`astro-caliper`と記す。
+パッケージ公開名と製品名は`astro-styletrace`とする。
 
 ### 7.2 Interaction model
 
 | Action | Behavior |
 | --- | --- |
-| `Ctrl + Shift + C` | caliperのON / OFF。設定可能 |
+| `Ctrl + Shift + C` | styletraceのON / OFF。設定可能 |
 | `Alt`を押してhover | box modelと計測overlayを表示 |
 | `Alt + Click` | 要素を選択しpanelを開く。同じ要素で解除 |
 | 選択後に別要素をhover | 選択要素との距離を表示 |
@@ -333,7 +333,7 @@ clickすると、`launch-editor-middleware`を経由して設定済みeditorの�
 - format、lint、type checking、Git diffをeditorから切り離す
 - 複数候補やshorthandのどこへ保存するか断定が必要になる
 
-astro-caliperは「直す場所と理由」を明らかにし、永続編集はeditorへ任せる。
+astro-styletraceは「直す場所と理由」を明らかにし、永続編集はeditorへ任せる。
 
 ### 7.6 Agent handoff in beta
 
@@ -501,7 +501,7 @@ CSSOMはsource lineを持たないため、Vite pluginの`transform` hookでmap�
 - `<style>` blockのoffsetを加算
 - selectorをnormalizeしてline配列へ対応
 - 同じselectorの複数出現をoccurrenceで区別
-- `/__caliper/css-map`からbrowserへ配布
+- `/__styletrace/css-map`からbrowserへ配布
 - browser startup時に一度取得し、hoverごとにfetchしない
 
 ### 10.3 Selector normalization
@@ -537,8 +537,8 @@ CSSOMはsource lineを持たないため、Vite pluginの`transform` hookでmap�
 Astro Integration (src/index.ts)
   ├─ dev commandだけでpage scriptをinject
   ├─ CSS map Vite plugin
-  ├─ /__caliper/css-map
-  └─ /__caliper/open-in-editor
+  ├─ /__styletrace/css-map
+  └─ /__styletrace/open-in-editor
 
 Browser boot (src/app.ts)
   ├─ host + ShadowRoot
@@ -574,7 +574,7 @@ src/
 - hostを`document.documentElement`直下へ追加
 - ShadowRootへ全UIを描画
 - page CSSをUIへ入れず、UI CSSをpageへ漏らさない
-- hostに`data-caliper`を付けhit testingから除外
+- hostに`data-styletrace`を付けhit testingから除外
 - Astro Dev Toolbarも除外
 - invisible panelは`pointer-events: none`
 
@@ -855,7 +855,7 @@ playgroundはcomponent showcaseではなく、実サイトに近いCSS条件を�
 ### Scenario D — Production remains clean
 
 1. integrationを有効にしたまま`astro build`
-2. production HTML / JSに`astro-caliper/app`がない
+2. production HTML / JSに`astro-styletrace/app`がない
 3. editor endpointとCSS map endpointがproductionに存在しない
 
 ## 19. Success criteria
@@ -876,7 +876,7 @@ betaではtelemetryを送信しない。dogfoodingで次を記録する。
 
 ## 20. Competitive boundary
 
-astro-caliperが勝つべき領域:
+astro-styletraceが勝つべき領域:
 
 - Astroの`.astro` scoped CSSへのsource mapping
 - property単位のeditor jump

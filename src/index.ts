@@ -1,18 +1,18 @@
 import type { AstroIntegration } from 'astro';
 import launchEditorMiddleware from 'launch-editor-middleware';
-import type { CaliperOptions } from './app.js';
+import type { StyletraceOptions } from './app.js';
 import { createCssMapStore } from './css-map.js';
 
-const OPEN_IN_EDITOR = '/__caliper/open-in-editor';
-const CSS_MAP = '/__caliper/css-map';
+const OPEN_IN_EDITOR = '/__styletrace/open-in-editor';
+const CSS_MAP = '/__styletrace/css-map';
 
-export type { CaliperOptions };
+export type { StyletraceOptions };
 
-export default function caliper(options: CaliperOptions = {}): AstroIntegration {
+export default function styletrace(options: StyletraceOptions = {}): AstroIntegration {
   const cssMap = createCssMapStore();
 
   return {
-    name: 'astro-caliper',
+    name: 'astro-styletrace',
     hooks: {
       'astro:config:setup': ({ command, injectScript, updateConfig }) => {
         if (command !== 'dev') return;
@@ -21,7 +21,7 @@ export default function caliper(options: CaliperOptions = {}): AstroIntegration 
 
         injectScript(
           'page',
-          `import boot from 'astro-caliper/app';\nboot(${JSON.stringify(options)});`,
+          `import boot from 'astro-styletrace/app';\nboot(${JSON.stringify(options)});`,
         );
       },
 
@@ -34,7 +34,7 @@ export default function caliper(options: CaliperOptions = {}): AstroIntegration 
         server.middlewares.use(
           OPEN_IN_EDITOR,
           launchEditorMiddleware(undefined, server.config.root, (file, error) => {
-            server.config.logger.warn(`[astro-caliper] could not open ${file}: ${error ?? ''}`);
+            server.config.logger.warn(`[astro-styletrace] could not open ${file}: ${error ?? ''}`);
           }),
         );
       },

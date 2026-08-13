@@ -1,4 +1,4 @@
-# astro-caliper
+# astro-styletrace
 
 An Astro integration that shows **where a style came from** and **how far apart two elements are**, without opening DevTools.
 
@@ -11,9 +11,9 @@ Dev only. The integration bails out unless `command === 'dev'`, so nothing reach
 ## Install
 
 ```bash
-npm install -D astro-caliper
-# pnpm add -D astro-caliper
-# yarn add -D astro-caliper
+npm install -D astro-styletrace
+# pnpm add -D astro-styletrace
+# yarn add -D astro-styletrace
 ```
 
 Supports Astro 5, 6, and 7 (Vite 6, 7, and 8 respectively).
@@ -21,11 +21,11 @@ Supports Astro 5, 6, and 7 (Vite 6, 7, and 8 respectively).
 ```js
 // astro.config.mjs
 import { defineConfig } from 'astro/config';
-import caliper from 'astro-caliper';
+import styletrace from 'astro-styletrace';
 
 export default defineConfig({
-  integrations: [caliper()],
-  // The Dev Toolbar can stay off. caliper does not depend on it.
+  integrations: [styletrace()],
+  // The Dev Toolbar can stay off. styletrace does not depend on it.
   devToolbar: { enabled: false },
 });
 ```
@@ -36,13 +36,13 @@ Start the dev server and press `Ctrl + Shift + C`.
 
 | Key | Action |
 | --- | --- |
-| `Ctrl + Shift + C` | Toggle caliper on / off (default; configurable) |
+| `Ctrl + Shift + C` | Toggle styletrace on / off (default; configurable) |
 | `Alt` (held) | Show the measurement overlay (the panel stays closed) |
 | `Alt + Click` | Select an element and open the panel (click it again to close) |
 | `Esc` / click outside | Clear the selection and close the panel |
 | `Alt + ↑ / ↓` | Move the hovered element to its parent / child |
 
-An indicator sits in the bottom-left corner while caliper is on.
+An indicator sits in the bottom-left corner while styletrace is on.
 
 ### Searching and reading are separate
 
@@ -51,7 +51,7 @@ While `Alt` is held you get the overlay only — no panel. `Alt + Click` the ele
 ## Options
 
 ```js
-caliper({ shortcut: 'Alt+Shift+D' })
+styletrace({ shortcut: 'Alt+Shift+D' })
 ```
 
 | Option | Type | Default | Description |
@@ -75,12 +75,12 @@ src/pages/index.astro ↗
 - **declared** is the strongest candidate by specificity, not a verdict on which rule won. If other declarations feed the same longhand, a `+N` badge appears. **A row without `+N` has exactly one candidate and can be trusted as-is.**
 - **computed** is the only ground truth.
 - **measured** is the difference between `getBoundingClientRect()` values. Rows where it disagrees with `computed` are highlighted. Margin collapsing, flex distribution, and `gap` losing to `justify-content` all show up here.
-- If `font-size` / `line-height` are not declared on the element, caliper walks up the ancestors and labels the source, e.g. `← body`.
+- If `font-size` / `line-height` are not declared on the element, styletrace walks up the ancestors and labels the source, e.g. `← body`.
 - `width` / `height` get a row only when explicitly declared. The actual size is always shown in the header.
 
 Click the source file name to open it in your editor, at the exact line when one can be resolved.
 
-Click **Copy for agent** to copy the selected element, viewport, declared candidates, computed and measured values, selectors, competing-candidate counts, and `file:line` sources. The copied text labels declarations as candidates because caliper does not claim to reproduce the complete cascade. Copying is explicit and local; nothing is sent to an external service.
+Click **Copy for agent** to copy the selected element, viewport, declared candidates, computed and measured values, selectors, competing-candidate counts, and `file:line` sources. The copied text labels declarations as candidates because styletrace does not claim to reproduce the complete cascade. Copying is explicit and local; nothing is sent to an external service.
 
 ### What measured means
 
@@ -106,13 +106,13 @@ For example, a paragraph with `margin-block: 1rem` inside a flex container with 
 
 ## Non-goals
 
-caliper deliberately does not show: the resolved value behind `var()`, the expansion of `clamp()`, px → rem / vw conversions, the full list of matched rules, specificity and `@layer` values, or a text export of the panel. The two questions worth answering are "what does the CSS say" and "what did it actually become" — not the derivation in between.
+styletrace deliberately does not show: the resolved value behind `var()`, the expansion of `clamp()`, px → rem / vw conversions, the full list of matched rules, specificity and `@layer` values, or a text export of the panel. The two questions worth answering are "what does the CSS say" and "what did it actually become" — not the derivation in between.
 
 ## Editor jump
 
-The dev server runs `launch-editor` behind `/__caliper/open-in-editor`. Editor selection is left to the `LAUNCH_EDITOR` / `EDITOR` environment variables, or inferred from a running editor.
+The dev server runs `launch-editor` behind `/__styletrace/open-in-editor`. Editor selection is left to the `LAUNCH_EDITOR` / `EDITOR` environment variables, or inferred from a running editor.
 
-Line numbers come from a Vite `transform` hook where PostCSS collects `selector → line` and serves it at `/__caliper/css-map`. The map is fetched once at startup and read synchronously afterwards (fetching per hover cannot hold 60fps).
+Line numbers come from a Vite `transform` hook where PostCSS collects `selector → line` and serves it at `/__styletrace/css-map`. The map is fetched once at startup and read synchronously afterwards (fetching per hover cannot hold 60fps).
 
 - For `.astro` `<style>` blocks the **original file is re-read** rather than the compiled code, which collapses newlines and puts every rule on the same line
 - Selectors are matched through a normalization key (drop `[data-astro-cid-*]`, `'` → `"`, `*::before` → `::before`). The normalizer lives in one place, `src/core/css-map.ts`, and the dev server imports the same function

@@ -12,7 +12,7 @@ const matrix = [
   { range: '^7.0.0', port: 4377 },
 ];
 
-const temp = await mkdtemp(join(tmpdir(), 'astro-caliper-compat-'));
+const temp = await mkdtemp(join(tmpdir(), 'astro-styletrace-compat-'));
 const npmEnv = { ...process.env, npm_config_cache: join(temp, 'npm-cache') };
 
 try {
@@ -42,7 +42,7 @@ async function checkVersion(target, tarball) {
         type: 'module',
         dependencies: {
           astro: target.range,
-          'astro-caliper': `file:${tarball}`,
+          'astro-styletrace': `file:${tarball}`,
         },
       },
       null,
@@ -51,7 +51,7 @@ async function checkVersion(target, tarball) {
   );
   await writeFile(
     join(fixture, 'astro.config.mjs'),
-    `import { defineConfig } from 'astro/config';\nimport caliper from 'astro-caliper';\n\nexport default defineConfig({ integrations: [caliper()] });\n`,
+    `import { defineConfig } from 'astro/config';\nimport styletrace from 'astro-styletrace';\n\nexport default defineConfig({ integrations: [styletrace()] });\n`,
   );
   await writeFile(
     join(fixture, 'src', 'pages', 'index.astro'),
@@ -69,7 +69,7 @@ async function checkVersion(target, tarball) {
 
   await exec(astro, ['build'], { cwd: fixture });
   const productionHtml = await readFile(join(fixture, 'dist', 'index.html'), 'utf8');
-  assert(!productionHtml.includes('astro-caliper/app'), `${version}: client leaked into build`);
+  assert(!productionHtml.includes('astro-styletrace/app'), `${version}: client leaked into build`);
 
   const child = spawn(
     astro,
@@ -92,14 +92,14 @@ async function checkVersion(target, tarball) {
     const pageScriptResponse = await fetch(new URL(pageScriptPath, base));
     assert(pageScriptResponse.ok, `${version}: page script returned ${pageScriptResponse.status}`);
     const pageScript = await pageScriptResponse.text();
-    const bootPath = pageScript.match(/from "([^"]*astro-caliper(?:\/|_)app[^"]*)"/)?.[1];
-    assert(bootPath, `${version}: caliper boot was not injected`);
+    const bootPath = pageScript.match(/from "([^"]*astro-styletrace(?:\/|_)app[^"]*)"/)?.[1];
+    assert(bootPath, `${version}: styletrace boot was not injected`);
     const bootResponse = await fetch(new URL(bootPath, base));
-    assert(bootResponse.ok, `${version}: caliper client returned ${bootResponse.status}`);
+    assert(bootResponse.ok, `${version}: styletrace client returned ${bootResponse.status}`);
     const bootModule = await bootResponse.text();
-    assert(bootModule.includes('data-caliper'), `${version}: caliper client is invalid`);
+    assert(bootModule.includes('data-styletrace'), `${version}: styletrace client is invalid`);
 
-    const mapResponse = await fetch(`${base}/__caliper/css-map`);
+    const mapResponse = await fetch(`${base}/__styletrace/css-map`);
     assert(mapResponse.ok, `${version}: CSS map endpoint returned ${mapResponse.status}`);
     const map = await mapResponse.json();
     assert(Object.keys(map).some((file) => file.endsWith('index.astro')), `${version}: CSS map is empty`);

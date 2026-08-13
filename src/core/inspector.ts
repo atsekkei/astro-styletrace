@@ -17,7 +17,7 @@ export type Inspector = {
 
 export function createInspector(canvas: ShadowRoot): Inspector {
   const style = document.createElement('style');
-  style.setAttribute('data-caliper', 'styles');
+  style.setAttribute('data-styletrace', 'styles');
   style.textContent = CSS;
   canvas.appendChild(style);
 
@@ -201,7 +201,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
     }
 
     if (!selected) return;
-    if (event.composedPath().some(isCaliperNode)) return;
+    if (event.composedPath().some(isStyletraceNode)) return;
     select(null);
   };
 
@@ -293,8 +293,8 @@ export function createInspector(canvas: ShadowRoot): Inspector {
   };
 }
 
-function isCaliperNode(node: EventTarget): boolean {
-  return node instanceof Element && node.hasAttribute('data-caliper');
+function isStyletraceNode(node: EventTarget): boolean {
+  return node instanceof Element && node.hasAttribute('data-styletrace');
 }
 
 function readBox(computed: CSSStyleDeclaration): BoxModel {

@@ -1,6 +1,6 @@
 import type { Source } from './resolve-source.js';
 
-const ENDPOINT = '/__caliper/open-in-editor';
+const ENDPOINT = '/__styletrace/open-in-editor';
 
 export function editorTarget(source: Source): string | null {
   const raw = source.raw;
