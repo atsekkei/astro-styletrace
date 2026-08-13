@@ -295,6 +295,27 @@ export const CSS = `
   font-weight: 600;
 }
 
+.cal-block[data-changed="true"] .cal-prop::after {
+  content: "changed";
+  margin-left: ${U * 1.5}px;
+  color: var(--cal-accent);
+  font-size: var(--cal-size-s);
+  font-weight: 400;
+}
+
+.cal-val[data-row="before"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${U}px;
+  color: var(--cal-ink-3);
+  font-size: var(--cal-size-s);
+}
+
+.cal-diff {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .cal-source {
   align-self: flex-start;
   max-width: 100%;
@@ -332,6 +353,11 @@ export const CSS = `
 .cal-source[data-state="fail"] {
   color: var(--cal-ink-3);
   text-decoration: line-through;
+}
+
+.cal-source[data-state="success"] {
+  color: var(--cal-accent);
+  text-decoration: underline;
 }
 
 .cal-actions {

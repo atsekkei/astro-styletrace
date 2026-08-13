@@ -45,6 +45,7 @@ Start the dev server and press `Ctrl + Shift + C`.
 | `Ctrl + Shift + C` | Toggle styletrace on / off (default; configurable) |
 | `Alt` (held) | Show the measurement overlay (the panel stays closed) |
 | `Alt + Click` | Select an element and open the panel (click it again to close) |
+| `Enter` | Open the first source link for the selected element |
 | `Esc` / click outside | Clear the selection and close the panel |
 | `Alt + ↑ / ↓` | Move the hovered element to its parent / child |
 
@@ -84,7 +85,9 @@ src/pages/index.astro ↗
 - If `font-size` / `line-height` are not declared on the element, styletrace walks up the ancestors and labels the source, e.g. `← body`.
 - `width` / `height` get a row only when explicitly declared. The actual size is always shown in the header.
 
-Click the source file name to open it in your editor, at the exact line when one can be resolved.
+Click the source file name, or press `Enter`, to open it in your editor at the exact line when one can be resolved. The link briefly reports whether the editor jump opened or failed.
+
+After HMR, styletrace keeps the selected element when the same node survives, and tries to resolve it again by a stable DOM locator when Astro replaces the node. Rows that changed since the previous panel update get a `changed` marker and a compact `before` row for the values that moved.
 
 Click **Copy for agent** to copy the selected element, viewport, declared candidates, computed and measured values, selectors, competing-candidate counts, and `file:line` sources. The copied text labels declarations as candidates because styletrace does not claim to reproduce the complete cascade. Copying is explicit and local; nothing is sent to an external service.
 

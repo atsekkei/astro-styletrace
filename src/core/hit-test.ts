@@ -43,3 +43,53 @@ export function describe(el: Element): string {
     .join('');
   return `${tag}${id}${classes}`;
 }
+
+export function locatorFor(el: Element): string {
+  const parts: string[] = [];
+  let current: Element | null = el;
+
+  while (current && current !== document.documentElement) {
+    parts.unshift(segmentFor(current));
+    if (current.id) break;
+    current = current.parentElement;
+  }
+
+  return parts.join('>');
+}
+
+export function resolveLocator(locator: string): Element | null {
+  if (!locator) return null;
+
+  try {
+    return document.querySelector(locator);
+  } catch {
+    return null;
+  }
+}
+
+function segmentFor(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  if (el.id) return `${tag}#${cssEscape(el.id)}`;
+
+  const classes = Array.from(el.classList)
+    .filter((c) => !c.startsWith('astro-'))
+    .slice(0, 2)
+    .map((c) => `.${cssEscape(c)}`)
+    .join('');
+
+  const parent = el.parentElement;
+  if (!parent) return `${tag}${classes}`;
+
+  let index = 1;
+  for (const sibling of Array.from(parent.children)) {
+    if (sibling === el) break;
+    if (sibling.tagName === el.tagName) index += 1;
+  }
+
+  return `${tag}${classes}:nth-of-type(${index})`;
+}
+
+function cssEscape(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
+  return value.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+}

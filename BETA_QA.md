@@ -10,6 +10,8 @@ Run these checks before publishing a beta build.
 4. Confirm the panel shows declared candidate, computed value, measured value, and a source `file:line`.
 5. Click the source link and edit one spacing declaration in the editor.
 6. Confirm HMR updates the page and the panel recomputes without using Copy for agent.
+7. Confirm changed rows show a `before` value for the edited declaration.
+8. Confirm selection survives HMR when the same DOM locator still exists after replacement.
 
 ## Scenario B: Human finds the real cause
 
@@ -17,6 +19,7 @@ Run these checks before publishing a beta build.
 2. Confirm the panel distinguishes card margins from parent `gap`.
 3. Expand competing candidates and confirm each candidate has its own source link.
 4. Change the winning source and verify measured distance changes after HMR.
+5. Press `Enter` with the selection open and confirm the primary source opens with success feedback.
 
 ## Scenario C: Human delegates complex fix
 

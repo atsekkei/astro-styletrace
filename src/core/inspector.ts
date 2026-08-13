@@ -1,5 +1,5 @@
 import { loadCssMap } from './css-map.js';
-import { describe, childOf, parentOf, pick } from './hit-test.js';
+import { describe, childOf, locatorFor, parentOf, pick, resolveLocator } from './hit-test.js';
 import { matchCached, resetInheritCache } from './inherit.js';
 import { measure, type MeasureResult } from './measure.js';
 import { buildMetrics, hasTransformedChain } from './metrics.js';
@@ -33,6 +33,8 @@ export function createInspector(canvas: ShadowRoot): Inspector {
   let traversal: Element | null = null;
 
   let selected: Element | null = null;
+  let selectedLocator = '';
+  let selectionKey = '';
   let selectionDirty = false;
 
   let box: BoxModel | null = null;
@@ -71,7 +73,11 @@ export function createInspector(canvas: ShadowRoot): Inspector {
   function commit() {
     if (!active) return;
 
-    if (selected && !selected.isConnected) select(null);
+    if (selected && !selected.isConnected) {
+      const resolved = resolveLocator(selectedLocator);
+      if (resolved) select(resolved, { preserveKey: true });
+      else select(null);
+    }
 
     const selectedRect = selected ? selected.getBoundingClientRect() : null;
 
@@ -83,6 +89,7 @@ export function createInspector(canvas: ShadowRoot): Inspector {
         const computed = getComputedStyle(selected);
         const match = matchCached(selected);
         panel.update({
+          selectionKey,
           target: describe(selected),
           rect: selectedRect,
           metrics: buildMetrics(selected, selectedRect, computed, match.rules),
@@ -139,9 +146,12 @@ export function createInspector(canvas: ShadowRoot): Inspector {
     if (!altHeld) overlay.clear();
   }
 
-  function select(el: Element | null) {
+  function select(el: Element | null, options: { preserveKey?: boolean } = {}) {
     resizeObserver.disconnect();
     selected = el;
+    selectedLocator = el ? locatorFor(el) : '';
+    if (!el) selectionKey = '';
+    else if (!options.preserveKey) selectionKey = selectedLocator;
     selectionDirty = el !== null;
     placedKey = '';
     if (el) resizeObserver.observe(el);
@@ -166,6 +176,14 @@ export function createInspector(canvas: ShadowRoot): Inspector {
     if (event.key === 'Escape' && selected) {
       event.preventDefault();
       select(null);
+      return;
+    }
+
+    if (event.key === 'Enter' && selected) {
+      if (panel.openPrimarySource()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
       return;
     }
 
@@ -278,6 +296,10 @@ export function createInspector(canvas: ShadowRoot): Inspector {
       invalidateStyleIndex();
       resetInheritCache();
       void loadCssMap();
+      if (selected) {
+        const resolved = resolveLocator(selectedLocator);
+        if (resolved && resolved !== selected) select(resolved, { preserveKey: true });
+      }
       box = null;
       target = null;
       selectionDirty = true;

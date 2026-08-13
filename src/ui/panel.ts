@@ -5,6 +5,7 @@ import { editorTarget, openInEditor } from '../core/open-in-editor.js';
 import { fmt } from '../core/units.js';
 
 export type PanelContent = {
+  selectionKey: string;
   target: string;
   rect: DOMRect;
   metrics: Metric[];
@@ -17,6 +18,7 @@ export type Panel = {
   show(): void;
   hide(): void;
   dim(on: boolean): void;
+  openPrimarySource(): boolean;
   destroy(): void;
 };
 
@@ -42,13 +44,16 @@ export function createPanel(root: ShadowRoot): Panel {
 
   const hint = document.createElement('p');
   hint.className = 'cal-hint';
-  hint.textContent = 'Alt+Click select · Esc / outside click close · Alt+↑↓ parent/child';
+  hint.textContent =
+    'Alt+Click select · Enter open source · Esc / outside click close · Alt+↑↓ parent/child';
 
   el.append(head, body, actions, hint);
   root.appendChild(el);
 
   let expanded = new Set<string>();
   let last: PanelContent | null = null;
+  let previous: PanelContent | null = null;
+  let primarySource: HTMLButtonElement | null = null;
   let copyReset = 0;
 
   let x = 0;
@@ -116,16 +121,27 @@ export function createPanel(root: ShadowRoot): Panel {
 
   function render() {
     if (!last) return;
+    primarySource = null;
     renderHead(head, last);
-    renderBody(body, last, expanded, (property) => {
-      if (expanded.has(property)) expanded.delete(property);
-      else expanded.add(property);
-      render();
-    });
+    renderBody(
+      body,
+      last,
+      previous,
+      expanded,
+      (button) => {
+        if (!primarySource) primarySource = button;
+      },
+      (property) => {
+        if (expanded.has(property)) expanded.delete(property);
+        else expanded.add(property);
+        render();
+      },
+    );
   }
 
   return {
     update(content) {
+      previous = last && last.selectionKey === content.selectionKey ? last : null;
       last = content;
       expanded = new Set();
       render();
@@ -160,6 +176,11 @@ export function createPanel(root: ShadowRoot): Panel {
     },
     dim(on) {
       el.setAttribute('data-dim', String(on));
+    },
+    openPrimarySource() {
+      if (!primarySource) return false;
+      primarySource.click();
+      return true;
     },
     destroy() {
       if (copyReset) clearTimeout(copyReset);
@@ -230,7 +251,9 @@ function badge(text: string, tone?: 'warn'): HTMLElement {
 function renderBody(
   body: HTMLElement,
   content: PanelContent,
+  previous: PanelContent | null,
   expanded: Set<string>,
+  onPrimarySource: (button: HTMLButtonElement) => void,
   onToggle: (property: string) => void,
 ) {
   body.textContent = '';
@@ -243,23 +266,38 @@ function renderBody(
     return;
   }
 
+  const previousByKey = new Map(
+    (previous?.metrics ?? []).map((metric) => [metricKey(metric), metric]),
+  );
+
   for (const metric of content.metrics) {
-    body.appendChild(renderBlock(metric, expanded.has(metric.property), onToggle));
+    body.appendChild(
+      renderBlock(
+        metric,
+        previousByKey.get(metricKey(metric)) ?? null,
+        expanded.has(metric.property),
+        onPrimarySource,
+        onToggle,
+      ),
+    );
   }
 }
 
 function renderBlock(
   metric: Metric,
+  previous: Metric | null,
   open: boolean,
+  onPrimarySource: (button: HTMLButtonElement) => void,
   onToggle: (property: string) => void,
 ): HTMLElement {
   const block = document.createElement('section');
   block.className = 'cal-block';
   block.dataset.diverged = String(metric.diverged);
+  block.dataset.changed = String(hasChanged(metric, previous));
 
   block.appendChild(renderBlockHead(metric, open, onToggle));
-  block.appendChild(renderRows(metric));
-  block.appendChild(renderSource(metric.declared));
+  block.appendChild(renderRows(metric, previous));
+  block.appendChild(renderSource(metric.declared, onPrimarySource));
 
   if (open && metric.others.length > 0) block.appendChild(renderOthers(metric.others));
 
@@ -309,7 +347,7 @@ function renderBlockHead(
   return el;
 }
 
-function renderRows(metric: Metric): HTMLElement {
+function renderRows(metric: Metric, previous: Metric | null): HTMLElement {
   const rows = document.createElement('dl');
   rows.className = 'cal-rows';
 
@@ -320,6 +358,20 @@ function renderRows(metric: Metric): HTMLElement {
   rows.append(...row('computed', metric.computed, 'computed'));
   if (metric.measured !== null) {
     rows.append(...row('measured', formatMeasured(metric.measured), 'measured'));
+  }
+
+  const diffs = diffRows(metric, previous);
+  if (diffs.length > 0) {
+    const dt = document.createElement('dt');
+    dt.className = 'cal-label';
+    dt.textContent = 'before';
+
+    const dd = document.createElement('dd');
+    dd.className = 'cal-val';
+    dd.dataset.row = 'before';
+    dd.append(...diffs);
+
+    rows.append(dt, dd);
   }
 
   return rows;
@@ -350,7 +402,10 @@ function row(
   return [dt, dd];
 }
 
-function renderSource(candidate: Candidate): HTMLElement {
+function renderSource(
+  candidate: Candidate,
+  onPrimarySource?: (button: HTMLButtonElement) => void,
+): HTMLElement {
   const file = editorTarget(candidate.source);
 
   if (!file) {
@@ -371,12 +426,17 @@ function renderSource(candidate: Candidate): HTMLElement {
   el.dataset.open = 'true';
   el.title = `Open ${target} in your editor`;
   el.textContent = `${label} ↗`;
+  onPrimarySource?.(el);
   el.addEventListener('click', (event) => {
     event.stopPropagation();
     void openInEditor(target).then((ok) => {
-      if (ok) return;
-      el.dataset.state = 'fail';
-      setTimeout(() => delete el.dataset.state, 1000);
+      const original = `${label} ↗`;
+      el.dataset.state = ok ? 'success' : 'fail';
+      el.textContent = ok ? `Opened ${label}` : `Failed ${label}`;
+      setTimeout(() => {
+        el.textContent = original;
+        delete el.dataset.state;
+      }, 1000);
     });
   });
 
@@ -405,4 +465,49 @@ function renderOthers(others: Candidate[]): HTMLElement {
   }
 
   return list;
+}
+
+function metricKey(metric: Metric): string {
+  const declared = metric.declared;
+  const line = lineFor(declared.source, declared.selector, declared.occurrence);
+  return [
+    metric.property,
+    declared.property,
+    declared.source.label,
+    line ?? '',
+    declared.selector,
+  ].join('\0');
+}
+
+function hasChanged(metric: Metric, previous: Metric | null): boolean {
+  if (!previous) return false;
+  return (
+    metric.declared.value !== previous.declared.value ||
+    metric.computed !== previous.computed ||
+    metric.measured !== previous.measured
+  );
+}
+
+function diffRows(metric: Metric, previous: Metric | null): HTMLElement[] {
+  if (!previous || !hasChanged(metric, previous)) return [];
+
+  const out: HTMLElement[] = [];
+  addDiff(out, 'declared', previous.declared.value, metric.declared.value);
+  addDiff(out, 'computed', previous.computed, metric.computed);
+
+  const previousMeasured = previous.measured === null ? null : formatMeasured(previous.measured);
+  const measured = metric.measured === null ? null : formatMeasured(metric.measured);
+  addDiff(out, 'measured', previousMeasured, measured);
+
+  return out;
+}
+
+function addDiff(out: HTMLElement[], label: string, before: string | null, after: string | null) {
+  if (before === after || before === null) return;
+
+  const el = document.createElement('span');
+  el.className = 'cal-diff';
+  el.textContent = `${label} ${before}`;
+  if (after !== null) el.title = `${before} → ${after}`;
+  out.push(el);
 }
