@@ -363,13 +363,14 @@ function renderSource(candidate: Candidate): HTMLElement {
 
   const line = lineFor(candidate.source, candidate.selector, candidate.occurrence);
   const target = line === null ? file : `${file}:${line}`;
+  const label = line === null ? candidate.source.label : `${candidate.source.label}:${line}`;
 
   const el = document.createElement('button');
   el.type = 'button';
   el.className = 'cal-source';
   el.dataset.open = 'true';
   el.title = `Open ${target} in your editor`;
-  el.textContent = `${candidate.source.label} ↗`;
+  el.textContent = `${label} ↗`;
   el.addEventListener('click', (event) => {
     event.stopPropagation();
     void openInEditor(target).then((ok) => {

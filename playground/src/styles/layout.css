@@ -6,24 +6,14 @@
     margin-inline: auto;
     padding: var(--space-l) var(--space-m);
 
-    & > header {
-      display: flex;
-      align-items: baseline;
-      gap: var(--space-s);
-      padding-block-end: var(--space-m);
-      border-block-end: 1px solid var(--line);
-
-      & h1 {
-        margin: 0;
-        font-size: clamp(1.5rem, 4vw, 2.5rem);
-        letter-spacing: -0.02em;
-      }
+    & > main {
+      min-width: 0;
     }
   }
 
   .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
     gap: var(--space-m);
     margin-block: var(--space-l);
 

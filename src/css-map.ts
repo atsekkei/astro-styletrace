@@ -3,6 +3,7 @@ import { extname } from 'node:path';
 import postcss from 'postcss';
 import type { Plugin } from 'vite';
 import { normalizeSelector, type CssMap } from './core/css-map.js';
+import { splitTopLevel } from './core/specificity.js';
 
 const STYLE_ID = /\.(css|scss|sass|less|styl|stylus)(\?|$)/;
 const PLAIN_STYLE = new Set(['.css', '.scss', '.sass', '.less', '.styl', '.stylus']);
@@ -38,7 +39,7 @@ export function createCssMapStore(): CssMapStore {
   };
 }
 
-function collect(code: string, id: string): Record<string, number[]> | null {
+export function collect(code: string, id: string): Record<string, number[]> | null {
   if (!STYLE_ID.test(id)) return null;
   if (id.includes('/node_modules/')) return null;
 
@@ -70,17 +71,42 @@ function collectBlock(
     if (!line) return;
 
     const at = line + block.offset;
-    const key = normalizeSelector(rule.selector);
+    const selector = resolvePostcssNesting(rule);
+    const key = normalizeSelector(selector);
     if (key) pushLine(out, key, at);
 
-    if (rule.selectors.length > 1) {
-      for (const part of rule.selectors) {
+    const selectors = splitTopLevel(selector, ',');
+    if (selectors.length > 1) {
+      for (const part of selectors) {
         const single = normalizeSelector(part);
         if (single) pushLine(out, single, at);
       }
     }
   });
 
+}
+
+function resolvePostcssNesting(rule: postcss.Rule): string {
+  let selector = rule.selector;
+  let parent = rule.parent;
+
+  while (parent && parent.type !== 'root') {
+    if (parent.type === 'rule') selector = resolveNesting(selector, parent.selector);
+    parent = parent.parent;
+  }
+
+  return selector;
+}
+
+function resolveNesting(selector: string, parent: string): string {
+  const parentRef = splitTopLevel(parent, ',').length > 1 ? `:is(${parent})` : parent;
+
+  return splitTopLevel(selector, ',')
+    .map((part) => {
+      if (part.includes('&')) return part.replace(/&/g, parentRef);
+      return `${parentRef} ${part}`;
+    })
+    .join(', ');
 }
 
 function pushLine(out: Record<string, number[]>, selector: string, line: number): void {

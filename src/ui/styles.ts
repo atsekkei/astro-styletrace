@@ -225,11 +225,14 @@ export const CSS = `
 }
 
 .cal-prop {
+  flex: none;
   font-weight: 500;
   color: var(--cal-ink-2);
+  white-space: nowrap;
 }
 
 .cal-selector {
+  min-width: 0;
   margin-left: auto;
   overflow: hidden;
   color: var(--cal-ink-3);

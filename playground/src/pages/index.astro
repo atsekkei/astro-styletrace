@@ -2,6 +2,24 @@
 import Card from '../components/Card.astro';
 import '../styles/tokens.css';
 import '../styles/layout.css';
+
+const longHeadline =
+  'AI が書いた CSS の余白と出どころを、実コンテンツ入りのページで追跡するための長い見出し';
+const cards = [
+  {
+    title: 'clamp() で組んだ余白',
+    body: '宣言値は clamp(1rem, 2vw, 2rem)。計算値と実測値が一致するかを見る。',
+  },
+  {
+    title: 'CMS 相当の短いカード',
+    body: '短文。',
+    tone: 'accent',
+  },
+  {
+    title: '可変長テキストが入るカード',
+    body: '長い本文が入った時に minmax() の列幅、行間、gap、caption との距離がどう変わるかを確認する。agent がそれらしい CSS を書いたあとに、人間が何を見ればよいかを集めた fixture。',
+  },
+];
 ---
 
 <!doctype html>
@@ -18,41 +36,155 @@ import '../styles/layout.css';
   </head>
   <body>
     <div class="page">
-      <header>
+      <header class="site-head">
         <h1>styletrace playground</h1>
-        <p style="margin: 0; color: rgba(16, 19, 28, 0.6)">
-          Alt を押しながら要素に hover
-        </p>
+        <p>Alt を押しながら要素に hover</p>
       </header>
 
-      <section class="card-grid">
-        <Card title="clamp() で組んだ余白">
-          <p>宣言値は clamp(1rem, 2vw, 2rem)。計算値と一致するかを見る。</p>
-          <p>2 つ目の段落。gap と margin の競合を観察する。</p>
-        </Card>
+      <main>
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">content-first Astro fixture</p>
+            <h2>{longHeadline}</h2>
+            <p>
+              heading、prose、画像、caption、card grid、nested layout が混ざるページで、
+              declared candidate / computed / measured / source line を確認する。
+            </p>
+          </div>
+          <figure class="feature-media">
+            <div class="demo-image" aria-label="gradient test image"></div>
+            <figcaption>
+              aspect-ratio と caption の距離、画像幅の used value を見るための media block。
+            </figcaption>
+          </figure>
+        </section>
 
-        <Card title="ネスト CSS" tone="accent">
-          <p>ネストされた <code>&amp; h2</code> が解決されているか。</p>
-        </Card>
+        <article class="prose">
+          <h2>margin collapse と prose の確認</h2>
+          <p>
+            この段落は通常 flow の中にあり、前後の margin と親の padding がどう見えるかを確認する。
+            DevTools を開かず、source link から該当 CSS へ戻る導線を見る。
+          </p>
+          <p>
+            2 つ目の段落は長めにして、line-height、font-size、margin-block の computed value と
+            実際の読める距離を比べるために置いている。
+          </p>
+        </article>
 
-        <Card title="transform 適用中">
-          <p class="tilted">この段落には transform がかかっている。</p>
-        </Card>
-      </section>
+        <section class="card-grid">
+          {cards.map((card) => (
+            <Card title={card.title} tone={card.tone}>
+              <p>{card.body}</p>
+              <p>2 つ目の段落。gap と margin の競合を観察する。</p>
+            </Card>
+          ))}
 
-      <section class="row">
-        <div class="box a">A</div>
-        <div class="box b">B</div>
-      </section>
+          <Card title="ネスト CSS" tone="accent">
+            <p>ネストされた <code>&amp; h2</code> が解決されているか。</p>
+          </Card>
 
-      <section class="nested">
-        <div class="outer">
-          <div class="inner">内包パターンの確認用</div>
-        </div>
-      </section>
+          <Card title="transform 適用中">
+            <p class="tilted">この段落には transform がかかっている。</p>
+          </Card>
+        </section>
+
+        <section class="row">
+          <div class="box a">A</div>
+          <div class="box b">B</div>
+        </section>
+
+        <section class="nested">
+          <div class="outer">
+            <div class="inner">内包パターンの確認用</div>
+          </div>
+        </section>
+      </main>
     </div>
 
     <style>
+      .site-head {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-s);
+        padding-block-end: var(--space-m);
+        border-block-end: 1px solid var(--line);
+      }
+
+      .site-head h1 {
+        margin: 0;
+        font-size: clamp(1.5rem, 4vw, 2.5rem);
+      }
+
+      .site-head p {
+        margin: 0;
+        color: rgba(16, 19, 28, 0.6);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(16rem, 0.85fr);
+        gap: clamp(1.5rem, 5vw, 4rem);
+        align-items: end;
+        margin-block: var(--space-l);
+      }
+
+      .hero-copy {
+        max-width: 48rem;
+      }
+
+      .eyebrow {
+        margin-block: 0 var(--space-s);
+        font-size: 0.8125rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: color-mix(in oklab, var(--ink) 58%, transparent);
+      }
+
+      .hero h2 {
+        margin-block: 0 var(--space-m);
+        font-size: clamp(2rem, 7vw, 4.75rem);
+        line-height: 0.98;
+      }
+
+      .hero-copy > p:last-child {
+        max-width: 40rem;
+        margin-block: 0;
+        font-size: clamp(1rem, 2vw, 1.2rem);
+      }
+
+      .feature-media {
+        margin: 0;
+      }
+
+      .demo-image {
+        aspect-ratio: 4 / 3;
+        border-radius: 18px;
+        background:
+          linear-gradient(135deg, color-mix(in oklab, #2563eb 42%, white), transparent 60%),
+          linear-gradient(45deg, color-mix(in oklab, #16a34a 30%, white), #ffffff);
+        border: 1px solid var(--line);
+      }
+
+      .feature-media figcaption {
+        margin-block-start: var(--space-s);
+        font-size: 0.875rem;
+        color: color-mix(in oklab, var(--ink) 62%, transparent);
+      }
+
+      .prose {
+        max-width: 44rem;
+        margin-block: var(--space-l);
+      }
+
+      .prose h2 {
+        margin-block: 0 1rem;
+        font-size: clamp(1.5rem, 3vw, 2.25rem);
+      }
+
+      .prose p {
+        margin-block: 1rem;
+      }
+
       .tilted {
         transform: rotate(-1.5deg) translateX(4px);
       }
@@ -86,6 +218,21 @@ import '../styles/layout.css';
         padding: 1rem;
         background: color-mix(in oklab, var(--ink) 6%, transparent);
         border-radius: 8px;
+      }
+
+      @media (max-width: 48rem) {
+        .site-head {
+          display: block;
+        }
+
+        .site-head p {
+          margin-block-start: 0.25rem;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+          align-items: start;
+        }
       }
     </style>
   </body>

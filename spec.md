@@ -421,17 +421,26 @@ computed  16px ← body
 
 ### 8.6 Properties
 
-宣言があるものだけを表示する。
+宣言があるものだけを表示する。対象はDevTools全体の代替ではなく、content-first Astro siteでlayout理解に直結するpropertyへ絞る。
 
 ```text
+display
+width / height
+min-width / max-width
+min-height / max-height
+aspect-ratio
 margin-top / margin-right / margin-bottom / margin-left
 padding-top / padding-right / padding-bottom / padding-left
 row-gap / column-gap
+overflow / overflow-x / overflow-y
 font-size / line-height
-width / height
 ```
 
-`width` / `height`は明示宣言がある場合だけrowを作る。border boxの実寸はpanel headerへ常時表示する。
+`width` / `height`は明示宣言がある場合だけrowを作る。border boxの実寸はpanel headerへ常時表示する。`aspect-ratio`、`min-*`、`max-*`、`display`、`overflow-*`はcomputedだけを表示し、もっともらしいmeasured値を作らない。
+
+`font-size`と`line-height`の継承元表示は、text-like elementに限定する。`h1`〜`h6`、`p`、`li`、`a`、`button`、`label`、`figcaption`、`blockquote`、`pre`、`code`、table cell、または直接のtext nodeを持つ要素では表示する。空のvisual block、media placeholder、background image用の`div`では、bodyから継承されたtypographyだけを表示してlayout情報を押し下げない。
+
+例えば`div.demo-image { aspect-ratio: 4 / 3; }`を選択した場合、ユーザーが知りたい主情報は`aspect-ratio`とheaderのborder box実寸であり、bodyから継承された`line-height`ではない。
 
 ## 9. Measurement overlay
 

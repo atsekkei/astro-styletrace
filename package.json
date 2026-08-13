@@ -1,17 +1,17 @@
 {
   "name": "astro-styletrace",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.0",
   "type": "module",
   "description": "Astro integration that shows where a style came from and how far apart elements are, without opening DevTools",
   "license": "MIT",
   "author": "atsekkei",
-  "homepage": "https://github.com/atsekkei/astro-caliper#readme",
+  "homepage": "https://github.com/atsekkei/astro-styletrace#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/atsekkei/astro-caliper.git"
+    "url": "git+https://github.com/atsekkei/astro-styletrace.git"
   },
   "bugs": {
-    "url": "https://github.com/atsekkei/astro-caliper/issues"
+    "url": "https://github.com/atsekkei/astro-styletrace/issues"
   },
   "keywords": [
     "astro",
@@ -36,7 +36,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "dev": "pnpm --filter playground dev",
@@ -46,7 +47,11 @@
     "check:boundary": "sh scripts/check-boundary.sh",
     "check": "pnpm run typecheck && pnpm run check:boundary && pnpm run check:core",
     "check:core": "pnpm build && node --test tests/*.test.mjs",
-    "check:compat": "pnpm build && node scripts/check-astro-compat.mjs"
+    "check:compat": "pnpm build && node scripts/check-astro-compat.mjs",
+    "prepack": "pnpm build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "astro": "^5.0.0 || ^6.0.0 || ^7.0.0",

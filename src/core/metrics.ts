@@ -24,6 +24,14 @@ export type Metric = {
 };
 
 const PROPERTIES = [
+  'display',
+  'width',
+  'height',
+  'min-width',
+  'max-width',
+  'min-height',
+  'max-height',
+  'aspect-ratio',
   'margin-top',
   'margin-right',
   'margin-bottom',
@@ -34,18 +42,53 @@ const PROPERTIES = [
   'padding-left',
   'row-gap',
   'column-gap',
+  'overflow',
+  'overflow-x',
+  'overflow-y',
   'font-size',
   'line-height',
-  'width',
-  'height',
 ];
 
 const INHERITED = new Set(['font-size', 'line-height']);
+const TEXT_LIKE_TAGS = new Set([
+  'A',
+  'ABBR',
+  'ADDRESS',
+  'B',
+  'BLOCKQUOTE',
+  'BUTTON',
+  'CAPTION',
+  'CODE',
+  'DD',
+  'DT',
+  'EM',
+  'FIGCAPTION',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'I',
+  'LABEL',
+  'LEGEND',
+  'LI',
+  'P',
+  'PRE',
+  'Q',
+  'SMALL',
+  'SPAN',
+  'STRONG',
+  'TD',
+  'TEXTAREA',
+  'TH',
+]);
 
 const SHORTHANDS: Record<string, string[]> = {
   margin: ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'],
   padding: ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'],
   gap: ['row-gap', 'column-gap'],
+  overflow: ['overflow-x', 'overflow-y'],
   inset: ['top', 'right', 'bottom', 'left'],
   font: ['font-size', 'line-height'],
 };
@@ -65,6 +108,7 @@ export function buildMetrics(
 
     if (candidates.length === 0) {
       if (!INHERITED.has(property)) continue;
+      if (!isTextLike(el)) continue;
 
       const inherited = findInherited(el, (ancestorRules) => {
         const found = findCandidates(ancestorRules, property, computed);
@@ -134,6 +178,18 @@ function findCandidates(
 
   out.sort((a, b) => -compareCascade(a.weight, b.weight));
   return out.map(({ candidate }) => candidate);
+}
+
+function isTextLike(el: Element): boolean {
+  if (TEXT_LIKE_TAGS.has(el.tagName)) return true;
+  if ((el as HTMLElement).isContentEditable) return true;
+  if (el.getAttribute('role') === 'button' || el.getAttribute('role') === 'link') return true;
+
+  for (const node of Array.from(el.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) return true;
+  }
+
+  return false;
 }
 
 function covers(

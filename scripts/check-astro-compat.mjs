@@ -7,16 +7,16 @@ import { promisify } from 'node:util';
 const exec = promisify(execFile);
 const root = new URL('..', import.meta.url).pathname;
 const matrix = [
-  { range: '^5.0.0', port: 4355 },
-  { range: '^6.0.0', port: 4366 },
-  { range: '^7.0.0', port: 4377 },
+  { range: '^5.0.0', vite: '^6.0.0', port: 4355 },
+  { range: '^6.0.0', vite: '^7.0.0', port: 4366 },
+  { range: '^7.0.0', vite: '^8.0.0', port: 4377 },
 ];
 
 const temp = await mkdtemp(join(tmpdir(), 'astro-styletrace-compat-'));
 const npmEnv = { ...process.env, npm_config_cache: join(temp, 'npm-cache') };
 
 try {
-  const { stdout } = await exec('npm', ['pack', '--json', '--pack-destination', temp], {
+  const { stdout } = await exec('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', temp], {
     cwd: root,
     env: npmEnv,
   });
@@ -38,10 +38,13 @@ async function checkVersion(target, tarball) {
     join(fixture, 'package.json'),
     JSON.stringify(
       {
+        name: `astro-styletrace-compat-${target.range.slice(1, 2)}`,
+        version: '0.0.0',
         private: true,
         type: 'module',
         dependencies: {
           astro: target.range,
+          vite: target.vite,
           'astro-styletrace': `file:${tarball}`,
         },
       },
@@ -58,7 +61,7 @@ async function checkVersion(target, tarball) {
     `<main class="fixture">compat</main>\n\n<style>\n  .fixture { margin-block: 1rem; }\n</style>\n`,
   );
 
-  await exec('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund'], {
+  await exec('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--legacy-peer-deps'], {
     cwd: fixture,
     env: npmEnv,
   });

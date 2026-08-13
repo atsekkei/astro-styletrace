@@ -2,6 +2,7 @@ import type { AstroIntegration } from 'astro';
 import launchEditorMiddleware from 'launch-editor-middleware';
 import type { StyletraceOptions } from './app.js';
 import { createCssMapStore } from './css-map.js';
+import { resolveEditorTarget } from './editor-request.js';
 
 const OPEN_IN_EDITOR = '/__styletrace/open-in-editor';
 const CSS_MAP = '/__styletrace/css-map';
@@ -31,12 +32,25 @@ export default function styletrace(options: StyletraceOptions = {}): AstroIntegr
           res.end(JSON.stringify(cssMap.snapshot()));
         });
 
-        server.middlewares.use(
-          OPEN_IN_EDITOR,
-          launchEditorMiddleware(undefined, server.config.root, (file, error) => {
-            server.config.logger.warn(`[astro-styletrace] could not open ${file}: ${error ?? ''}`);
-          }),
-        );
+        const launchEditor = launchEditorMiddleware(undefined, server.config.root, (file, error) => {
+          server.config.logger.warn(`[astro-styletrace] could not open ${file}: ${error ?? ''}`);
+        });
+
+        server.middlewares.use(OPEN_IN_EDITOR, (req, res) => {
+          const url = new URL(req.url ?? '/', 'http://styletrace.local');
+          const target = resolveEditorTarget(server.config.root, url.searchParams.get('file'));
+
+          if (!target.ok) {
+            res.statusCode = target.status;
+            res.setHeader('content-type', 'text/plain; charset=utf-8');
+            res.end(target.message);
+            return;
+          }
+
+          url.searchParams.set('file', target.target);
+          req.url = `${url.pathname}${url.search}`;
+          launchEditor(req, res);
+        });
       },
     },
   };
