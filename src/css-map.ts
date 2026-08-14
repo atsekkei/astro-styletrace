@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { extname } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, extname, resolve } from 'node:path';
 import postcss from 'postcss';
 import type { Plugin } from 'vite';
 import { normalizeSelector, type CssMap } from './core/css-map.js';
@@ -23,10 +23,11 @@ export function createCssMapStore(): CssMapStore {
         enforce: 'pre',
         apply: 'serve',
         transform(code, id) {
-          const lines = collect(code, id);
-          if (lines) {
-            const file = fileOf(id);
-            map[file] = lines;
+          const sources = collectSources(code, id);
+          if (sources) {
+            for (const [file, lines] of Object.entries(sources)) {
+              map[file] = lines;
+            }
           }
           return null;
         },
@@ -44,14 +45,45 @@ export function collect(code: string, id: string): Record<string, number[]> | nu
   if (id.includes('/node_modules/')) return null;
 
   const file = fileOf(id);
+  return collectFile(code, file);
+}
 
+export function collectSources(code: string, id: string): CssMap | null {
+  if (!STYLE_ID.test(id)) return null;
+  if (id.includes('/node_modules/')) return null;
+
+  const file = fileOf(id);
+  const out: CssMap = {};
+  collectSourcesInto(code, file, out, new Set());
+  return Object.keys(out).length ? out : null;
+}
+
+function collectSourcesInto(code: string, file: string, out: CssMap, seen: Set<string>): void {
+  if (seen.has(file)) return;
+  seen.add(file);
+
+  const lines = collectFile(code, file);
+  if (lines) out[file] = lines;
+
+  for (const imported of localImports(code, file)) {
+    let importedCode: string;
+    try {
+      importedCode = readFileSync(imported, 'utf8');
+    } catch {
+      continue;
+    }
+    collectSourcesInto(importedCode, imported, out, seen);
+  }
+}
+
+function collectFile(code: string, file: string): Record<string, number[]> | null {
   const blocks = PLAIN_STYLE.has(extname(file)) ? [{ code, offset: 0 }] : styleBlocks(file);
   if (!blocks?.length) return null;
 
   const out: Record<string, number[]> = {};
 
   for (const block of blocks) collectBlock(block, file, out);
-  return out;
+  return Object.keys(out).length ? out : null;
 }
 
 function collectBlock(
@@ -116,6 +148,45 @@ function pushLine(out: Record<string, number[]>, selector: string, line: number)
 
 function fileOf(id: string): string {
   return id.split('?')[0] ?? id;
+}
+
+function localImports(code: string, file: string): string[] {
+  let root: postcss.Root;
+  try {
+    root = postcss.parse(code, { from: file });
+  } catch {
+    return [];
+  }
+
+  const out: string[] = [];
+  root.walkAtRules('import', (rule) => {
+    const specifier = importSpecifier(rule.params);
+    if (!specifier) return;
+
+    const resolved = resolveImport(file, specifier);
+    if (resolved) out.push(resolved);
+  });
+  return out;
+}
+
+function importSpecifier(params: string): string | null {
+  const trimmed = params.trim();
+  const match =
+    /^url\(\s*(?:"([^"]+)"|'([^']+)'|([^)'"\s]+))\s*\)/.exec(trimmed) ??
+    /^(?:"([^"]+)"|'([^']+)')/.exec(trimmed);
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+function resolveImport(file: string, specifier: string): string | null {
+  if (/^(?:[a-z]+:)?\/\//i.test(specifier)) return null;
+  if (specifier.startsWith('/') || specifier.startsWith('\0')) return null;
+
+  const base = resolve(dirname(file), specifier);
+  const candidates = extname(base)
+    ? [base]
+    : ['.css', '.scss', '.sass', '.less', '.styl', '.stylus'].map((ext) => `${base}${ext}`);
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
 function styleBlocks(file: string): { code: string; offset: number }[] | null {

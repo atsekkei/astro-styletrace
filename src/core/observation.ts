@@ -1,4 +1,4 @@
-import { lineFor } from './css-map.js';
+import { sourceLocationFor } from './css-map.js';
 import { formatMeasured, type Candidate, type Metric } from './metrics.js';
 import type { Source } from './resolve-source.js';
 
@@ -97,8 +97,10 @@ function toObservationCandidate(
   candidate: Candidate,
   sourceTarget?: (source: Source) => string | null,
 ): ObservationCandidate {
-  const line = lineFor(candidate.source, candidate.selector, candidate.occurrence);
-  const target = sourceTarget?.(candidate.source) ?? null;
+  const location = sourceLocationFor(candidate.source, candidate.selector, candidate.occurrence);
+  const source = location?.source ?? candidate.source;
+  const line = location?.line ?? null;
+  const target = sourceTarget?.(source) ?? null;
 
   return {
     value: candidate.value,
@@ -106,7 +108,7 @@ function toObservationCandidate(
     selector: candidate.selector,
     important: candidate.important,
     source: {
-      label: candidate.source.label,
+      label: source.label,
       line,
       target: target && line !== null ? `${target}:${line}` : target,
     },
