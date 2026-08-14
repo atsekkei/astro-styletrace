@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.3
+
+- Fixed editor source tracking for CSS rules that come from local stylesheets imported by another stylesheet.
+
 ## 0.1.0-beta.2
 
 - Raised the styletrace host and overlay z-index values so the inspector stays above inspected page elements.
