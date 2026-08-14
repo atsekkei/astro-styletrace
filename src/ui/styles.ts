@@ -15,6 +15,7 @@ export const TOKENS = {
 } as const;
 
 const U = 4;
+export const STYLETRACE_Z_INDEX = 2147483647;
 
 export const CSS = `
 :host {
@@ -38,7 +39,7 @@ export const CSS = `
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 2147483000;
+  z-index: ${STYLETRACE_Z_INDEX - 2};
   overflow: visible;
 }
 
@@ -54,7 +55,7 @@ export const CSS = `
   position: fixed;
   left: ${U * 4}px;
   bottom: ${U * 4}px;
-  z-index: 2147483001;
+  z-index: ${STYLETRACE_Z_INDEX - 1};
   display: none;
   align-items: center;
   gap: ${U * 2}px;
@@ -93,7 +94,7 @@ export const CSS = `
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 2147483002;
+  z-index: ${STYLETRACE_Z_INDEX};
   display: flex;
   flex-direction: column;
   box-sizing: border-box;

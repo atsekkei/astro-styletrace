@@ -1,5 +1,6 @@
 import { createInspector } from './core/inspector.js';
 import { createIndicator } from './ui/indicator.js';
+import { STYLETRACE_Z_INDEX } from './ui/styles.js';
 
 export type StyletraceOptions = {
   shortcut?: string;
@@ -28,7 +29,7 @@ export default function boot(options: StyletraceOptions = {}): void {
   const host = document.createElement('div');
   host.setAttribute('data-styletrace', 'host');
   host.style.cssText =
-    'position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;color-scheme:light;';
+    `position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;color-scheme:light;z-index:${STYLETRACE_Z_INDEX};`;
   document.documentElement.appendChild(host);
 
   const shadow = host.attachShadow({ mode: 'open' });
