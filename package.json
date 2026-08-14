@@ -1,6 +1,6 @@
 {
   "name": "astro-styletrace",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "type": "module",
   "description": "Astro integration that shows where a style came from and how far apart elements are, without opening DevTools",
   "license": "MIT",
@@ -36,7 +36,7 @@
     }
   },
   "bin": {
-    "astro-styletrace": "./dist/cli.js"
+    "astro-styletrace": "dist/cli.js"
   },
   "files": [
     "dist",

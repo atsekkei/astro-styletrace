@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.2
+
+- Raised the styletrace host and overlay z-index values so the inspector stays above inspected page elements.
+
 ## 0.1.0-beta.1
 
 - Improved the human self-fix workflow with HMR selection recovery, before/after value hints, source-open feedback, and keyboard source opening.
