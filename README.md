@@ -158,7 +158,7 @@ The adapter exposes `styletrace_observation` and `styletrace_source`.
 Agents that support the open agent skills ecosystem can install the companion skill from the shared `.agents/skills/astro-styletrace` project skill:
 
 ```bash
-npx skills add atsekkei/astro-styletrace --skill astro-styletrace
+npx skills add roukara/astro-styletrace --skill astro-styletrace
 ```
 
 During local development of this repository:

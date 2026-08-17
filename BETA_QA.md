@@ -46,4 +46,4 @@ Run these checks before publishing a beta build.
 6. Run `npx astro-styletrace source <file-from-observation> --line <line> --url http://localhost:4321`.
 7. Confirm the source text is returned and path traversal outside the project root is rejected.
 8. Start `npx astro-styletrace mcp --url http://localhost:4321` from an MCP client and confirm `styletrace_observation` and `styletrace_source` are listed.
-9. Run `npx skills add atsekkei/astro-styletrace --skill astro-styletrace --list` after publishing the branch and confirm the skill is discoverable.
+9. Run `npx skills add roukara/astro-styletrace --skill astro-styletrace --list` after publishing the branch and confirm the skill is discoverable.

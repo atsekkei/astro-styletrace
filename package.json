@@ -4,14 +4,14 @@
   "type": "module",
   "description": "Astro integration that shows where a style came from and how far apart elements are, without opening DevTools",
   "license": "MIT",
-  "author": "atsekkei",
-  "homepage": "https://github.com/atsekkei/astro-styletrace#readme",
+  "author": "Roukara",
+  "homepage": "https://github.com/roukara/astro-styletrace#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/atsekkei/astro-styletrace.git"
+    "url": "git+https://github.com/roukara/astro-styletrace.git"
   },
   "bugs": {
-    "url": "https://github.com/atsekkei/astro-styletrace/issues"
+    "url": "https://github.com/roukara/astro-styletrace/issues"
   },
   "keywords": [
     "astro",
